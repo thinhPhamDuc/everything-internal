@@ -1,0 +1,75 @@
+# docker-compose.yml — hạ tầng dev cho dự án "Airline Ticket Management"
+#
+# Mục đích: chỉ dựng các service HẠ TẦNG (Postgres, RabbitMQ) bằng Docker,
+# còn Spring Boot app thì bạn vẫn chạy trực tiếp bằng IDE / `./gradlew bootRun`
+# để dev nhanh (hot reload, debug). Khi nào muốn containerize luôn cả app,
+# ta sẽ thêm Dockerfile + service "app" ở một bước sau (Task 0 mở rộng).
+#
+# Cách dùng:
+#   docker compose up -d        # chạy nền
+#   docker compose ps           # xem trạng thái
+#   docker compose logs -f      # xem log
+#   docker compose down         # tắt (thêm -v nếu muốn xoá luôn volume/data)
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: airline-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: airline_db
+      POSTGRES_USER: airline_user
+      POSTGRES_PASSWORD: airline_pass
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U airline_user -d airline_db"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - airline-net
+
+  rabbitmq:
+    image: rabbitmq:3.13-management-alpine
+    container_name: airline-rabbitmq
+    restart: unless-stopped
+    environment:
+      RABBITMQ_DEFAULT_USER: airline_mq
+      RABBITMQ_DEFAULT_PASS: airline_mq_pass
+    ports:
+      - "5672:5672"   # AMQP protocol — app kết nối vào đây
+      - "15672:15672" # Management UI — mở http://localhost:15672
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - airline-net
+
+volumes:
+  postgres_data:
+  rabbitmq_data:
+
+networks:
+  airline-net:
+    driver: bridge
+
+# ─────────────────────────────────────────────────────────────
+# Cấu hình tương ứng trong src/main/resources/application.properties
+# (áp dụng sau khi bạn thêm dependency Postgres driver + Spring AMQP):
+#
+# spring.datasource.url=jdbc:postgresql://localhost:5432/airline_db
+# spring.datasource.username=airline_user
+# spring.datasource.password=airline_pass
+#
+# spring.rabbitmq.host=localhost
+# spring.rabbitmq.port=5672
+# spring.rabbitmq.username=airline_mq
+# spring.rabbitmq.password=airline_mq_pass
+# ─────────────────────────────────────────────────────────────

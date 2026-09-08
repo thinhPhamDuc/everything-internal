@@ -1,0 +1,47 @@
+plugins {
+    id 'java'
+    id 'org.springframework.boot' version '4.1.1'
+    id 'io.spring.dependency-management' version '1.1.7'
+}
+
+group = 'com.app'
+version = '0.0.1-SNAPSHOT'
+description = 'everything-internal'
+
+java {
+    toolchain {
+        languageVersion = JavaLanguageVersion.of(17)
+    }
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    compileOnly 'org.projectlombok:lombok'
+    annotationProcessor 'org.projectlombok:lombok'
+    testImplementation 'org.springframework.boot:spring-boot-starter-data-jpa-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+    runtimeOnly 'org.postgresql:postgresql'
+    testCompileOnly 'org.projectlombok:lombok'
+    testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    testAnnotationProcessor 'org.projectlombok:lombok'
+    // 1. Spring Boot Starter Security (Bảo mật)
+    implementation 'org.springframework.boot:spring-boot-starter-security'
+    // 2. Spring Boot Starter Validation (Xác thực dữ liệu đầu vào)
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    // 3. JJWT (Java JWT) - Thư viện hỗ trợ tạo và giải mã JWT
+    // Thay '0.12.5' bằng phiên bản mới nhất hiện tại nếu cần
+    implementation 'io.jsonwebtoken:jjwt-api:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-impl:0.12.6'
+    runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
+    // 4. Spring AMQP (RabbitMQ) - xử lý bất đồng bộ qua message queue
+    implementation 'org.springframework.boot:spring-boot-starter-amqp'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+}
