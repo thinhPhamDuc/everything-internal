@@ -99,7 +99,7 @@ public class AuthService {
     }
 
     public TokenResponse login(LoginRequest request) {
-        User user = userRepository.findByEmail(request.email())
+        User user = userRepository.findByEmailAndDeletedAtIsNull(request.email())
                 .orElseThrow(() -> new BadCredentialsException("Sai email hoặc mật khẩu"));
 
         if (!passwordEncoder.matches(request.password(), user.getPassword())) {

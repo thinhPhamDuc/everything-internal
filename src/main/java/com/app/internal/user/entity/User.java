@@ -42,6 +42,12 @@ public class User {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
+    // Soft-delete: null = user còn hoạt động bình thường. Set giá trị này thay
+    // vì DELETE thật để không phá FK của Booking (Booking.user tham chiếu tới
+    // đúng row này) và giữ lại lịch sử booking sau khi tài khoản bị xoá.
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
+
     // LAZY (mặc định của @OneToMany) -> chỉ query bookings khi thật sự gọi
     // getBookings(), và bắt buộc phải còn Session mở tại thời điểm gọi đó.
     // Đây chính là field dùng để tái hiện LazyInitializationException.
