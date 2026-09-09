@@ -106,6 +106,14 @@ public class AuthService {
             throw new BadCredentialsException("Sai email hoặc mật khẩu");
         }
 
+        // Tài khoản bị admin khoá (status != ACTIVE, VD "INACTIVE") vẫn còn
+        // deletedAt == null nên qua được check ở trên - phải chặn riêng ở đây,
+        // dùng CHUNG message với case sai mật khẩu để không lộ việc tài khoản
+        // tồn tại và đang bị khoá.
+        if (!STATUS_ACTIVE.equals(user.getStatus())) {
+            throw new BadCredentialsException("Sai email hoặc mật khẩu");
+        }
+
         List<String> roles = List.of(user.getRoles());
         String token = jwtProvider.generateToken(user.getId(), roles);
 

@@ -40,4 +40,10 @@ public class GlobalExceptionHandler {
         return ResponseEntity.status(HttpStatus.NOT_FOUND)
                 .body(new ApiError(Instant.now(), 404, ex.getMessage(), List.of()));
     }
+
+    @ExceptionHandler(IllegalArgumentException.class)
+    public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex) {
+        return ResponseEntity.badRequest()
+                .body(new ApiError(Instant.now(), 400, ex.getMessage(), List.of()));
+    }
 }

@@ -1,6 +1,8 @@
 package com.app.internal.auth.repository;
 
 import com.app.internal.user.entity.User;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.Optional;
@@ -25,4 +27,6 @@ public interface UserRepository extends JpaRepository<User, Long> {
     // unique constraint trên DB thành partial unique index (WHERE deleted_at
     // IS NULL) trước - việc đó ngoài phạm vi soft-delete lần này.
     boolean existsByEmail(String email);
+
+    Page<User> findByStatusAndEmailContainingIgnoreCase(String status, String email, Pageable pageable);
 }

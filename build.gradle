@@ -40,6 +40,8 @@ dependencies {
     runtimeOnly 'io.jsonwebtoken:jjwt-jackson:0.12.6'
     // 4. Spring AMQP (RabbitMQ) - xử lý bất đồng bộ qua message queue
     implementation 'org.springframework.boot:spring-boot-starter-amqp'
+    // 5. Spring Security Test - cho @WithMockUser trong test @PreAuthorize
+    testImplementation 'org.springframework.security:spring-security-test'
 }
 
 tasks.named('test') {

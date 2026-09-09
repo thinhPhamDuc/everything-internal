@@ -1,0 +1,58 @@
+package com.app.internal.user.controller;
+
+import com.app.internal.auth.service.AuthService;
+import com.app.internal.user.dto.UserResponse;
+import com.app.internal.user.dto.UserUpdateRequest;
+import com.app.internal.user.dto.UserUpdateStatusRequest;
+import com.app.internal.user.service.UserService;
+import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.web.PageableDefault;
+import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.web.bind.annotation.*;
+
+@RestController
+@RequestMapping("/admin/users")
+@PreAuthorize("hasRole('ADMIN')") // Áp cho toàn bộ method trong class - chỉ ADMIN mới gọi được nhóm API này.
+@RequiredArgsConstructor
+public class UserController {
+
+    private final UserService userService;
+
+    @GetMapping
+    public ResponseEntity<Page<UserResponse>> list(
+            @RequestParam(defaultValue = "") String status,
+            @RequestParam(defaultValue = "") String email,
+            @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
+        return ResponseEntity.ok(userService.listUsers(status, email, pageable));
+    }
+
+    @GetMapping("/{id}")
+    public ResponseEntity<UserResponse> getUserById(@PathVariable("id") Long id) {
+        return ResponseEntity.ok(userService.getUserById(id));
+    }
+
+    @PutMapping("/{id}")
+    public ResponseEntity<UserResponse> updateUser(
+            @PathVariable("id") Long id,
+            @Valid @RequestBody UserUpdateRequest request) {
+        return ResponseEntity.ok(userService.updateUser(id, request));
+    }
+
+    @PatchMapping("/{id}/status")
+    public ResponseEntity<Void> updateStatus(
+            @PathVariable("id") Long id,
+            @Valid @RequestBody UserUpdateStatusRequest request) { // Hoặc dùng @RequestParam nếu truyền qua query
+        userService.changeStatus(id, request.getStatus().name());
+        return ResponseEntity.noContent().build(); // Trả về 204 No Content vì chỉ đổi trạng thái
+    }
+
+    @DeleteMapping("/{id}")
+    public ResponseEntity<Void> deleteUser(@PathVariable("id") Long id) {
+        userService.softDeleteUser(id);
+        return ResponseEntity.noContent().build();
+    }
+}
