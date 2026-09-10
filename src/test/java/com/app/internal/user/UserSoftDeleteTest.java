@@ -6,6 +6,7 @@ import com.app.internal.auth.service.AuthService;
 import com.app.internal.booking.entity.Booking;
 import com.app.internal.booking.repository.BookingRepository;
 import com.app.internal.common.exception.UserNotFoundException;
+import com.app.internal.role.repository.RoleRepository;
 import com.app.internal.user.entity.User;
 import com.app.internal.user.service.UserService;
 import org.junit.jupiter.api.AfterEach;
@@ -47,6 +48,9 @@ class UserSoftDeleteTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private RoleRepository roleRepository;
+
     private Long userId;
     private Long bookingId;
     private String email;
@@ -60,7 +64,7 @@ class UserSoftDeleteTest {
                 .password(passwordEncoder.encode(RAW_PASSWORD))
                 .fullName("Soft Delete Test User")
                 .status("ACTIVE")
-                .roles("CUSTOMER")
+                .role(roleRepository.findByName("CUSTOMER").orElseThrow())
                 .createdAt(LocalDateTime.now())
                 .build());
         userId = user.getId();

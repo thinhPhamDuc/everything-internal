@@ -3,6 +3,7 @@ package com.app.internal.user;
 import com.app.internal.auth.dto.LoginRequest;
 import com.app.internal.auth.repository.UserRepository;
 import com.app.internal.auth.service.AuthService;
+import com.app.internal.role.repository.RoleRepository;
 import com.app.internal.user.dto.UserResponse;
 import com.app.internal.user.dto.UserUpdateRequest;
 import com.app.internal.user.entity.User;
@@ -45,6 +46,9 @@ class UserStatusTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private RoleRepository roleRepository;
+
     private Long userId;
     private String email;
 
@@ -57,7 +61,7 @@ class UserStatusTest {
                 .password(passwordEncoder.encode(RAW_PASSWORD))
                 .fullName("Status Test User")
                 .status("ACTIVE")
-                .roles("CUSTOMER")
+                .role(roleRepository.findByName("CUSTOMER").orElseThrow())
                 .createdAt(LocalDateTime.now())
                 .build());
         userId = user.getId();

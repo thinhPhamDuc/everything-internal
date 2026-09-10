@@ -7,9 +7,13 @@ import com.app.internal.auth.dto.TokenResponse;
 import com.app.internal.auth.jwt.JwtProvider;
 import com.app.internal.auth.repository.UserRepository;
 import com.app.internal.common.exception.DuplicateEmailException;
+import com.app.internal.common.exception.RoleNotFoundException;
 import com.app.internal.notification.EmailService;
 import com.app.internal.notification.dto.UserRegisteredEvent;
 import com.app.internal.notification.mq.UserEventPublisher;
+import com.app.internal.role.entity.Permission;
+import com.app.internal.role.entity.Role;
+import com.app.internal.role.repository.RoleRepository;
 import com.app.internal.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +36,7 @@ public class AuthService {
     private static final String STATUS_ACTIVE = "ACTIVE";
 
     private final UserRepository userRepository;
+    private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final JwtProvider jwtProvider;
     private final EmailService emailService; // giữ lại để đối chiếu với cách gọi trực tiếp (đã comment bên dưới)
@@ -43,12 +48,18 @@ public class AuthService {
             throw new DuplicateEmailException("Email đã được sử dụng");
         }
 
+        // DEFAULT_ROLE giờ trỏ tới 1 Role thật trong DB (seed ở data.sql) thay
+        // vì gán thẳng chuỗi "CUSTOMER" như trước Task 3.
+        Role defaultRole = roleRepository.findByName(DEFAULT_ROLE)
+                .orElseThrow(() -> new RoleNotFoundException(
+                        "Role mặc định \"" + DEFAULT_ROLE + "\" chưa được seed trong DB"));
+
         User user = User.builder()
                 .email(request.getEmail())
                 .password(passwordEncoder.encode(request.getPassword()))
                 .fullName(request.getFullName())
                 .status(STATUS_ACTIVE)
-                .roles(DEFAULT_ROLE)
+                .role(defaultRole)
                 .createdAt(LocalDateTime.now())
                 .build();
 
@@ -98,6 +109,10 @@ public class AuthService {
         return new RegisterResponse(saved.getId(), saved.getEmail(), saved.getFullName());
     }
 
+    // @Transactional(readOnly = true) bắt buộc từ Task 3 - user.getRole() và
+    // role.getPermissions() đều FetchType.LAZY, cần Session còn mở tới lúc
+    // đọc permissions bên dưới (cùng lý do đã áp dụng ở UserService/RoleService).
+    @Transactional(readOnly = true)
     public TokenResponse login(LoginRequest request) {
         User user = userRepository.findByEmailAndDeletedAtIsNull(request.email())
                 .orElseThrow(() -> new BadCredentialsException("Sai email hoặc mật khẩu"));
@@ -114,8 +129,11 @@ public class AuthService {
             throw new BadCredentialsException("Sai email hoặc mật khẩu");
         }
 
-        List<String> roles = List.of(user.getRoles());
-        String token = jwtProvider.generateToken(user.getId(), roles);
+        List<String> roles = List.of(user.getRole().getName());
+        List<String> permissions = user.getRole().getPermissions().stream()
+                .map(Permission::getCode)
+                .toList();
+        String token = jwtProvider.generateToken(user.getId(), roles, permissions);
 
         return new TokenResponse(token);
     }

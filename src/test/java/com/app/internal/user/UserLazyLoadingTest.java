@@ -3,6 +3,7 @@ package com.app.internal.user;
 import com.app.internal.auth.repository.UserRepository;
 import com.app.internal.booking.entity.Booking;
 import com.app.internal.booking.repository.BookingRepository;
+import com.app.internal.role.repository.RoleRepository;
 import com.app.internal.user.entity.User;
 import jakarta.persistence.EntityManager;
 import jakarta.persistence.EntityManagerFactory;
@@ -56,6 +57,9 @@ class UserLazyLoadingTest {
     @Autowired
     private EntityManagerFactory entityManagerFactory;
 
+    @Autowired
+    private RoleRepository roleRepository;
+
     private Long userId;
     private Long bookingId;
 
@@ -66,7 +70,7 @@ class UserLazyLoadingTest {
                 .password("irrelevant-hash")
                 .fullName("Lazy Test User")
                 .status("ACTIVE")
-                .roles("CUSTOMER")
+                .role(roleRepository.findByName("CUSTOMER").orElseThrow())
                 .createdAt(LocalDateTime.now())
                 .build());
 

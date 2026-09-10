@@ -7,12 +7,14 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.List;
 
 @Component
@@ -35,10 +37,18 @@ public class JwtFilter extends OncePerRequestFilter {
                 Claims claims = jwtProvider.parseClaims(token);
                 Long userId = jwtProvider.getUserId(claims);
                 List<String> roles = jwtProvider.getRoles(claims);
+                List<String> permissions = jwtProvider.getPermissions(claims);
 
-                var authorities = roles.stream()
+                List<GrantedAuthority> authorities = new ArrayList<>();
+                roles.stream()
                         .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
-                        .toList();
+                        .forEach(authorities::add);
+                // Permission KHÔNG có tiền tố "ROLE_" - khác với role, dùng
+                // thẳng mã permission (VD "USER_MANAGE") để @PreAuthorize
+                // check bằng hasAuthority('USER_MANAGE') thay vì hasRole(...).
+                permissions.stream()
+                        .map(SimpleGrantedAuthority::new)
+                        .forEach(authorities::add);
 
                 var authentication = new UsernamePasswordAuthenticationToken(userId, null, authorities);
                 SecurityContextHolder.getContext().setAuthentication(authentication);

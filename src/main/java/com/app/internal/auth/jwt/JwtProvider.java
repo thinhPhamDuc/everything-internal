@@ -23,13 +23,14 @@ public class JwtProvider {
         return Keys.hmacShaKeyFor(secret.getBytes());
     }
 
-    public String generateToken(Long userId, List<String> roles) {
+    public String generateToken(Long userId, List<String> roles, List<String> permissions) {
         Date now = new Date();
         Date expiry = new Date(now.getTime() + expirationMs);
 
         return Jwts.builder()
                 .subject(String.valueOf(userId))   // "sub" = userId
                 .claim("roles", roles)             // "roles" = danh sách role
+                .claim("permissions", permissions) // "permissions" = danh sách mã permission
                 .issuedAt(now)
                 .expiration(expiry)                // "exp"
                 .signWith(key())
@@ -62,5 +63,11 @@ public class JwtProvider {
     @SuppressWarnings("unchecked")
     public List<String> getRoles(Claims claims) {
         return (List<String>) claims.get("roles");
+    }
+
+    @SuppressWarnings("unchecked")
+    public List<String> getPermissions(Claims claims) {
+        List<String> permissions = (List<String>) claims.get("permissions");
+        return permissions != null ? permissions : List.of();
     }
 }

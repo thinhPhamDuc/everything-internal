@@ -29,4 +29,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
     boolean existsByEmail(String email);
 
     Page<User> findByStatusAndEmailContainingIgnoreCase(String status, String email, Pageable pageable);
+
+    // Dùng để chặn RoleService.deleteRole() xoá 1 role đang còn user tham
+    // chiếu (User.role là nullable=false) - tránh lỗi FK 500 xấu xí.
+    boolean existsByRoleId(Long roleId);
 }

@@ -1,6 +1,7 @@
 package com.app.internal.user;
 
 import com.app.internal.auth.repository.UserRepository;
+import com.app.internal.role.repository.RoleRepository;
 import com.app.internal.user.entity.User;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -46,6 +47,9 @@ class UserControllerHttpTest {
     @Autowired
     private PasswordEncoder passwordEncoder;
 
+    @Autowired
+    private RoleRepository roleRepository;
+
     private MockMvc mockMvc;
     private Long userId;
 
@@ -60,7 +64,7 @@ class UserControllerHttpTest {
                 .password(passwordEncoder.encode("irrelevant-password"))
                 .fullName("Http Test User")
                 .status("ACTIVE")
-                .roles("CUSTOMER")
+                .role(roleRepository.findByName("CUSTOMER").orElseThrow())
                 .createdAt(LocalDateTime.now())
                 .build());
         userId = user.getId();
@@ -72,7 +76,7 @@ class UserControllerHttpTest {
     }
 
     @Test
-    @WithMockUser(roles = "ADMIN")
+    @WithMockUser(authorities = "USER_MANAGE")
     void deleteUser_quaHttp_tra204_vaSoftDeleteThatTrongDB() throws Exception {
         assertNull(userRepository.findById(userId).orElseThrow().getDeletedAt());
 
@@ -95,7 +99,7 @@ class UserControllerHttpTest {
     }
 
     @Test
-    @WithMockUser(roles = "ADMIN")
+    @WithMockUser(authorities = "USER_MANAGE")
     void getUserById_idKhongTonTai_tra404QuaHttp() throws Exception {
         long khongTonTaiId = -1L;
 

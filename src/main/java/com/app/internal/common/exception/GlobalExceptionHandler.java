@@ -41,6 +41,24 @@ public class GlobalExceptionHandler {
                 .body(new ApiError(Instant.now(), 404, ex.getMessage(), List.of()));
     }
 
+    @ExceptionHandler(RoleNotFoundException.class)
+    public ResponseEntity<ApiError> handleRoleNotFound(RoleNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiError(Instant.now(), 404, ex.getMessage(), List.of()));
+    }
+
+    @ExceptionHandler(DuplicateRoleNameException.class)
+    public ResponseEntity<ApiError> handleDuplicateRoleName(DuplicateRoleNameException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(Instant.now(), 409, ex.getMessage(), List.of()));
+    }
+
+    @ExceptionHandler(RoleInUseException.class)
+    public ResponseEntity<ApiError> handleRoleInUse(RoleInUseException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(Instant.now(), 409, ex.getMessage(), List.of()));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity.badRequest()

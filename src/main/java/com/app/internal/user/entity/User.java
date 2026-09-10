@@ -1,6 +1,7 @@
 package com.app.internal.user.entity;
 
 import com.app.internal.booking.entity.Booking;
+import com.app.internal.role.entity.Role;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -36,8 +37,12 @@ public class User {
     @Column(name = "status", nullable = false, length = 50)
     private String status;
 
-    @Column(name = "roles", nullable = false, length = 50)
-    private String roles;
+    // Task 3: thay cột "roles" String (luôn 1 giá trị) bằng quan hệ many-to-one
+    // tới bảng Role thật. many-to-one (không phải many-to-many) vì JwtFilter/
+    // JwtProvider vẫn đang giả định mỗi user có đúng 1 role - xem GIAO_AN Task 3.
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "role_id", nullable = false)
+    private Role role;
 
     @Column(name = "created_at")
     private LocalDateTime createdAt;

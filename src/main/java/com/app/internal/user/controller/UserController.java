@@ -1,6 +1,7 @@
 package com.app.internal.user.controller;
 
 import com.app.internal.auth.service.AuthService;
+import com.app.internal.user.dto.AssignRoleRequest;
 import com.app.internal.user.dto.UserResponse;
 import com.app.internal.user.dto.UserUpdateRequest;
 import com.app.internal.user.dto.UserUpdateStatusRequest;
@@ -14,9 +15,13 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+// Task 3: đổi từ hasRole('ADMIN') sang hasAuthority theo permission - cho
+// phép sau này gán quyền USER_MANAGE cho STAFF mà không cần lên hẳn ADMIN.
+// RoleController (CRUD role/permission) vẫn giữ hasRole('ADMIN') tuyệt đối vì
+// đó là hành động nhạy cảm hơn (có thể tự cấp quyền cho chính mình nếu lỏng).
 @RestController
 @RequestMapping("/admin/users")
-@PreAuthorize("hasRole('ADMIN')") // Áp cho toàn bộ method trong class - chỉ ADMIN mới gọi được nhóm API này.
+@PreAuthorize("hasAuthority('USER_MANAGE')")
 @RequiredArgsConstructor
 public class UserController {
 
@@ -54,5 +59,12 @@ public class UserController {
     public ResponseEntity<Void> deleteUser(@PathVariable("id") Long id) {
         userService.softDeleteUser(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PatchMapping("/{id}/role")
+    public ResponseEntity<UserResponse> assignRole(
+            @PathVariable("id") Long id,
+            @Valid @RequestBody AssignRoleRequest request) {
+        return ResponseEntity.ok(userService.assignRole(id, request.getRoleId()));
     }
 }
