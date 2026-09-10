@@ -59,6 +59,24 @@ public class GlobalExceptionHandler {
                 .body(new ApiError(Instant.now(), 409, ex.getMessage(), List.of()));
     }
 
+    @ExceptionHandler(InventoryNotFoundException.class)
+    public ResponseEntity<ApiError> handleInventoryNotFound(InventoryNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiError(Instant.now(), 404, ex.getMessage(), List.of()));
+    }
+
+    @ExceptionHandler(DuplicateInventoryException.class)
+    public ResponseEntity<ApiError> handleDuplicateInventory(DuplicateInventoryException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(Instant.now(), 409, ex.getMessage(), List.of()));
+    }
+
+    @ExceptionHandler(InvalidSeatCountException.class)
+    public ResponseEntity<ApiError> handleInvalidSeatCount(InvalidSeatCountException ex) {
+        return ResponseEntity.badRequest()
+                .body(new ApiError(Instant.now(), 400, ex.getMessage(), List.of()));
+    }
+
     @ExceptionHandler(IllegalArgumentException.class)
     public ResponseEntity<ApiError> handleIllegalArgument(IllegalArgumentException ex) {
         return ResponseEntity.badRequest()
