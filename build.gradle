@@ -42,6 +42,10 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-amqp'
     // 5. Spring Security Test - cho @WithMockUser trong test @PreAuthorize
     testImplementation 'org.springframework.security:spring-security-test'
+    // 6. Spring Batch (Task 5) - xử lý staging -> Inventory theo chunk, tự
+    // tạo bảng BATCH_JOB_INSTANCE/BATCH_JOB_EXECUTION... khi app khởi động
+    implementation 'org.springframework.boot:spring-boot-starter-batch'
+    testImplementation 'org.springframework.batch:spring-batch-test'
 }
 
 tasks.named('test') {

@@ -32,6 +32,9 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/auth/register", "/auth/login").permitAll()
                         // /auth/me KHÔNG permitAll -> dùng để test token ở bước 8
+                        // Mock API bên thứ 3 (Task 5) - giả lập hệ thống ngoài, không
+                        // thuộc phạm vi phân quyền nội bộ.
+                        .requestMatchers("/mock/third-party/**").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
