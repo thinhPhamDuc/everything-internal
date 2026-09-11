@@ -2,7 +2,12 @@ package com.app.internal.user;
 
 import com.app.internal.auth.repository.UserRepository;
 import com.app.internal.booking.entity.Booking;
+import com.app.internal.booking.enums.BookingStatus;
 import com.app.internal.booking.repository.BookingRepository;
+import com.app.internal.inventory.entity.FlightTicketInventory;
+import com.app.internal.inventory.enums.InventoryStatus;
+import com.app.internal.inventory.enums.SeatClass;
+import com.app.internal.inventory.repository.InventoryRepository;
 import com.app.internal.role.repository.RoleRepository;
 import com.app.internal.user.entity.User;
 import jakarta.persistence.EntityManager;
@@ -19,6 +24,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -60,8 +66,12 @@ class UserLazyLoadingTest {
     @Autowired
     private RoleRepository roleRepository;
 
+    @Autowired
+    private InventoryRepository inventoryRepository;
+
     private Long userId;
     private Long bookingId;
+    private Long inventoryId;
 
     @BeforeEach
     void setUp() {
@@ -74,19 +84,41 @@ class UserLazyLoadingTest {
                 .createdAt(LocalDateTime.now())
                 .build());
 
+        FlightTicketInventory inventory = inventoryRepository.save(FlightTicketInventory.builder()
+                .flightCode("VN123")
+                .airline("Vietnam Airlines")
+                .origin("HAN")
+                .destination("SGN")
+                .departureTime(LocalDateTime.now().plusDays(1))
+                .arrivalTime(LocalDateTime.now().plusDays(1).plusHours(2))
+                .seatClass(SeatClass.ECONOMY)
+                .price(BigDecimal.valueOf(1_000_000))
+                .totalSeats(10)
+                .availableSeats(9)
+                .status(InventoryStatus.OPEN)
+                .sourceSystem("MANUAL")
+                .createdAt(LocalDateTime.now())
+                .build());
+
         Booking booking = bookingRepository.save(Booking.builder()
                 .user(user)
-                .flightCode("VN123")
+                .inventory(inventory)
+                .passengerCount(1)
+                .status(BookingStatus.PENDING)
+                .totalPrice(inventory.getPrice())
                 .createdAt(LocalDateTime.now())
+                .expiresAt(LocalDateTime.now().plusMinutes(15))
                 .build());
 
         userId = user.getId();
         bookingId = booking.getId();
+        inventoryId = inventory.getId();
     }
 
     @AfterEach
     void tearDown() {
         bookingRepository.deleteById(bookingId);
+        inventoryRepository.deleteById(inventoryId);
         userRepository.deleteById(userId);
     }
 

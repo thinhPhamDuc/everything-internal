@@ -4,8 +4,13 @@ import com.app.internal.auth.dto.LoginRequest;
 import com.app.internal.auth.repository.UserRepository;
 import com.app.internal.auth.service.AuthService;
 import com.app.internal.booking.entity.Booking;
+import com.app.internal.booking.enums.BookingStatus;
 import com.app.internal.booking.repository.BookingRepository;
 import com.app.internal.common.exception.UserNotFoundException;
+import com.app.internal.inventory.entity.FlightTicketInventory;
+import com.app.internal.inventory.enums.InventoryStatus;
+import com.app.internal.inventory.enums.SeatClass;
+import com.app.internal.inventory.repository.InventoryRepository;
 import com.app.internal.role.repository.RoleRepository;
 import com.app.internal.user.entity.User;
 import com.app.internal.user.service.UserService;
@@ -17,6 +22,7 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.security.authentication.BadCredentialsException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
@@ -51,8 +57,12 @@ class UserSoftDeleteTest {
     @Autowired
     private RoleRepository roleRepository;
 
+    @Autowired
+    private InventoryRepository inventoryRepository;
+
     private Long userId;
     private Long bookingId;
+    private Long inventoryId;
     private String email;
 
     @BeforeEach
@@ -69,10 +79,31 @@ class UserSoftDeleteTest {
                 .build());
         userId = user.getId();
 
+        FlightTicketInventory inventory = inventoryRepository.save(FlightTicketInventory.builder()
+                .flightCode("VN999")
+                .airline("Vietnam Airlines")
+                .origin("HAN")
+                .destination("SGN")
+                .departureTime(LocalDateTime.now().plusDays(1))
+                .arrivalTime(LocalDateTime.now().plusDays(1).plusHours(2))
+                .seatClass(SeatClass.ECONOMY)
+                .price(BigDecimal.valueOf(1_000_000))
+                .totalSeats(10)
+                .availableSeats(9)
+                .status(InventoryStatus.OPEN)
+                .sourceSystem("MANUAL")
+                .createdAt(LocalDateTime.now())
+                .build());
+        inventoryId = inventory.getId();
+
         Booking booking = bookingRepository.save(Booking.builder()
                 .user(user)
-                .flightCode("VN999")
+                .inventory(inventory)
+                .passengerCount(1)
+                .status(BookingStatus.PENDING)
+                .totalPrice(inventory.getPrice())
                 .createdAt(LocalDateTime.now())
+                .expiresAt(LocalDateTime.now().plusMinutes(15))
                 .build());
         bookingId = booking.getId();
     }
@@ -80,6 +111,7 @@ class UserSoftDeleteTest {
     @AfterEach
     void tearDown() {
         bookingRepository.deleteById(bookingId);
+        inventoryRepository.deleteById(inventoryId);
         userRepository.deleteById(userId);
     }
 

@@ -82,4 +82,31 @@ public class GlobalExceptionHandler {
         return ResponseEntity.badRequest()
                 .body(new ApiError(Instant.now(), 400, ex.getMessage(), List.of()));
     }
+
+    @ExceptionHandler(BookingNotFoundException.class)
+    public ResponseEntity<ApiError> handleBookingNotFound(BookingNotFoundException ex) {
+        return ResponseEntity.status(HttpStatus.NOT_FOUND)
+                .body(new ApiError(Instant.now(), 404, ex.getMessage(), List.of()));
+    }
+
+    // 409 (không phải 400) - đây không phải lỗi input sai, mà là xung đột
+    // trạng thái tại thời điểm request tới (ghế vừa bị người khác đặt hết) -
+    // client có thể thử lại hợp lý, khác với lỗi input cần sửa mới gọi lại được.
+    @ExceptionHandler(SeatUnavailableException.class)
+    public ResponseEntity<ApiError> handleSeatUnavailable(SeatUnavailableException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(Instant.now(), 409, ex.getMessage(), List.of()));
+    }
+
+    @ExceptionHandler(InventoryNotAvailableException.class)
+    public ResponseEntity<ApiError> handleInventoryNotAvailable(InventoryNotAvailableException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(Instant.now(), 409, ex.getMessage(), List.of()));
+    }
+
+    @ExceptionHandler(InvalidBookingStateException.class)
+    public ResponseEntity<ApiError> handleInvalidBookingState(InvalidBookingStateException ex) {
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body(new ApiError(Instant.now(), 409, ex.getMessage(), List.of()));
+    }
 }

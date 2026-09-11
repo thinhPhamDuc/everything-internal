@@ -2,7 +2,9 @@ package com.app.internal.inventory.service;
 
 import com.app.internal.common.exception.DuplicateInventoryException;
 import com.app.internal.common.exception.InvalidSeatCountException;
+import com.app.internal.common.exception.InventoryNotAvailableException;
 import com.app.internal.common.exception.InventoryNotFoundException;
+import com.app.internal.common.exception.SeatUnavailableException;
 import com.app.internal.inventory.dto.InventoryCreateRequest;
 import com.app.internal.inventory.dto.InventoryResponse;
 import com.app.internal.inventory.dto.InventoryUpdateRequest;
@@ -11,6 +13,7 @@ import com.app.internal.inventory.enums.InventoryStatus;
 import com.app.internal.inventory.repository.InventoryRepository;
 import com.app.internal.search.cache.SearchCacheService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -109,6 +112,50 @@ public class InventoryService {
     public void closeInventory(Long id) {
         FlightTicketInventory inventory = findOrThrow(id);
         inventory.setStatus(InventoryStatus.CANCELLED);
+        scheduleInvalidation(inventory);
+    }
+
+    // Task 7 (BookingService.reserve): trừ ghế lúc giữ chỗ. saveAndFlush() ép
+    // Hibernate bắn UPDATE ... WHERE id=? AND version=? NGAY LẬP TỨC (không
+    // đợi tới cuối transaction) để bắt OptimisticLockingFailureException ngay
+    // tại đây, trong cùng transaction với việc tạo Booking (đúng yêu cầu "trừ
+    // ghế + tạo booking phải nằm trong 1 @Transactional" - GIAO_AN Task 7).
+    // 2 request cùng trừ ghế cuối cùng: request thua sẽ có UPDATE khớp 0 dòng
+    // (version đã bị request thắng bump trước đó) -> Hibernate tự phát hiện,
+    // KHÔNG cần tự tay lock tay (SELECT ... FOR UPDATE).
+    @Transactional
+    public FlightTicketInventory decrementSeats(Long inventoryId, int passengerCount) {
+        FlightTicketInventory inventory = findOrThrow(inventoryId);
+
+        if (inventory.getStatus() != InventoryStatus.OPEN) {
+            throw new InventoryNotAvailableException(
+                    "Vé id=" + inventoryId + " không còn mở bán (status=" + inventory.getStatus() + ")");
+        }
+        if (inventory.getAvailableSeats() < passengerCount) {
+            throw new SeatUnavailableException(
+                    "Không đủ ghế trống (còn " + inventory.getAvailableSeats() + ", cần " + passengerCount + ")");
+        }
+
+        inventory.setAvailableSeats(inventory.getAvailableSeats() - passengerCount);
+        try {
+            inventoryRepository.saveAndFlush(inventory);
+        } catch (OptimisticLockingFailureException e) {
+            throw new SeatUnavailableException("Vé vừa hết chỗ do người khác đặt trước, vui lòng thử lại");
+        }
+
+        scheduleInvalidation(inventory);
+        return inventory;
+    }
+
+    // Task 7: hoàn ghế khi booking bị huỷ/hết hạn/thanh toán thất bại. KHÔNG
+    // check status OPEN/CLOSED - hoàn ghế phải luôn thành công bất kể vé đã
+    // bị admin đóng sau khi booking được tạo hay chưa (số liệu availableSeats
+    // vẫn phải đúng, độc lập với status hiển thị).
+    @Transactional
+    public void incrementSeats(Long inventoryId, int passengerCount) {
+        FlightTicketInventory inventory = findOrThrow(inventoryId);
+        inventory.setAvailableSeats(inventory.getAvailableSeats() + passengerCount);
+        inventoryRepository.saveAndFlush(inventory);
         scheduleInvalidation(inventory);
     }
 
