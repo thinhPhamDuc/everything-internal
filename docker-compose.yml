@@ -52,9 +52,27 @@ services:
     networks:
       - airline-net
 
+  redis:
+    image: redis:7-alpine
+    container_name: airline-redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    ports:
+      - "6379:6379" # search cache (Task 6 Phase B) - app kết nối vào đây
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - airline-net
+
 volumes:
   postgres_data:
   rabbitmq_data:
+  redis_data:
 
 networks:
   airline-net:
@@ -72,4 +90,7 @@ networks:
 # spring.rabbitmq.port=5672
 # spring.rabbitmq.username=airline_mq
 # spring.rabbitmq.password=airline_mq_pass
+#
+# spring.data.redis.host=localhost
+# spring.data.redis.port=6379
 # ─────────────────────────────────────────────────────────────

@@ -35,6 +35,9 @@ public class SecurityConfig {
                         // Mock API bên thứ 3 (Task 5) - giả lập hệ thống ngoài, không
                         // thuộc phạm vi phân quyền nội bộ.
                         .requestMatchers("/mock/third-party/**").permitAll()
+                        // Task 6: search vé - public, client chưa đăng nhập vẫn dùng được
+                        // (đúng GIAO_AN Task 6 + TASK6_SEARCH_REDIS_CACHE.md).
+                        .requestMatchers("/flights/search").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);

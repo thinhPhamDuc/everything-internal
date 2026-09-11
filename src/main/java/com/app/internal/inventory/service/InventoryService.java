@@ -9,6 +9,7 @@ import com.app.internal.inventory.dto.InventoryUpdateRequest;
 import com.app.internal.inventory.entity.FlightTicketInventory;
 import com.app.internal.inventory.enums.InventoryStatus;
 import com.app.internal.inventory.repository.InventoryRepository;
+import com.app.internal.search.cache.SearchCacheService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -24,6 +25,7 @@ public class InventoryService {
     private static final String SOURCE_MANUAL = "MANUAL";
 
     private final InventoryRepository inventoryRepository;
+    private final SearchCacheService searchCacheService;
 
     @Transactional(readOnly = true)
     public Page<InventoryResponse> listInventory(String origin, String destination, Pageable pageable) {
@@ -67,7 +69,9 @@ public class InventoryService {
                 .createdAt(LocalDateTime.now())
                 .build();
 
-        return toResponse(inventoryRepository.save(inventory));
+        FlightTicketInventory saved = inventoryRepository.save(inventory);
+        scheduleInvalidation(saved);
+        return toResponse(saved);
     }
 
     @Transactional
@@ -84,6 +88,10 @@ public class InventoryService {
         inventory.setPrice(request.getPrice());
         inventory.setTotalSeats(request.getTotalSeats());
 
+        // Giá vừa đổi -> cache search route này đang giữ giá cũ, phải xoá
+        // ngay (xem checklist TASK6_SEARCH_REDIS_CACHE.md: "sửa giá -> search
+        // lại thấy giá mới ngay, không đợi hết TTL").
+        scheduleInvalidation(inventory);
         return toResponse(inventory);
     }
 
@@ -91,6 +99,7 @@ public class InventoryService {
     public InventoryResponse changeStatus(Long id, InventoryStatus newStatus) {
         FlightTicketInventory inventory = findOrThrow(id);
         inventory.setStatus(newStatus);
+        scheduleInvalidation(inventory);
         return toResponse(inventory);
     }
 
@@ -100,6 +109,11 @@ public class InventoryService {
     public void closeInventory(Long id) {
         FlightTicketInventory inventory = findOrThrow(id);
         inventory.setStatus(InventoryStatus.CANCELLED);
+        scheduleInvalidation(inventory);
+    }
+
+    private void scheduleInvalidation(FlightTicketInventory inventory) {
+        searchCacheService.evictAfterCommit(inventory);
     }
 
     private FlightTicketInventory findOrThrow(Long id) {

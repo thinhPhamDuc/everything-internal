@@ -46,6 +46,9 @@ dependencies {
     // tạo bảng BATCH_JOB_INSTANCE/BATCH_JOB_EXECUTION... khi app khởi động
     implementation 'org.springframework.boot:spring-boot-starter-batch'
     testImplementation 'org.springframework.batch:spring-batch-test'
+    // 7. Spring Data Redis (Task 6 Phase B) - cache kết quả search, dùng
+    // Lettuce client mặc định đi kèm.
+    implementation 'org.springframework.boot:spring-boot-starter-data-redis'
 }
 
 tasks.named('test') {
