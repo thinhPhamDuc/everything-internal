@@ -33,7 +33,7 @@ public class RedisConfig {
         // "java." bao trọn BigDecimal/LocalDateTime/ArrayList... - field kiểu
         // JDK dùng trong FlightTicketInventory (đã tự bắt lỗi lúc test: thiếu
         // "java.math." làm mọi lần cache hit lỗi deserialize ngầm, rơi về
-        // Postgres không báo lỗi rõ ràng, chỉ thấy qua log WARN).
+        // MySQL không báo lỗi rõ ràng, chỉ thấy qua log WARN).
         PolymorphicTypeValidator typeValidator = BasicPolymorphicTypeValidator.builder()
                 .allowIfSubType("com.app.internal.")
                 .allowIfSubType("java.")

@@ -24,7 +24,7 @@ import java.util.concurrent.ThreadLocalRandom;
 //
 // NGUYÊN TẮC BẮT BUỘC: mọi lời gọi Redis ở đây PHẢI tự bọc try/catch, KHÔNG
 // BAO GIỜ ném exception ra ngoài - search phải luôn trả được kết quả từ
-// Postgres kể cả khi Redis sập hoàn toàn (đã có timeout ngắn ở
+// MySQL kể cả khi Redis sập hoàn toàn (đã có timeout ngắn ở
 // application.properties để lỗi kết nối trả về nhanh, không treo request).
 @Slf4j
 @Component
@@ -69,7 +69,7 @@ public class SearchCacheService {
             Object cached = redisTemplate.opsForValue().get(key);
             return (List<FlightTicketInventory>) cached;
         } catch (Exception e) {
-            log.warn("[SearchCacheService] Lỗi đọc cache key={}, bỏ qua cache, rơi xuống Postgres", key, e);
+            log.warn("[SearchCacheService] Lỗi đọc cache key={}, bỏ qua cache, rơi xuống MySQL", key, e);
             return null;
         }
     }
@@ -78,7 +78,7 @@ public class SearchCacheService {
         try {
             redisTemplate.opsForValue().set(key, matches, resolveTtl(departureDate));
         } catch (Exception e) {
-            log.warn("[SearchCacheService] Lỗi ghi cache key={}, bỏ qua - vẫn trả kết quả từ Postgres", key, e);
+            log.warn("[SearchCacheService] Lỗi ghi cache key={}, bỏ qua - vẫn trả kết quả từ MySQL", key, e);
         }
     }
 

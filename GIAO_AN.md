@@ -9,8 +9,12 @@
 > `spring-boot-starter-webmvc`. Các phần dưới đây sẽ giả định bạn thêm dần các
 > dependency khác (Security, AMQP, Batch, Validation...) theo từng task.
 >
-> Database mình đề xuất: **PostgreSQL** (đã cấu hình sẵn trong `docker-compose.yml`).
-> Nếu bạn muốn MySQL thì báo lại, mình sửa compose file.
+> Database: **MySQL** (đã cấu hình sẵn trong `docker-compose.yml`). Dự án khởi
+> điểm dùng PostgreSQL, đã quyết định chuyển sang MySQL — xem chi tiết từng
+> file cần sửa (`build.gradle`, `docker-compose.yml`, `application.properties`,
+> `schema.sql`, `data.sql`) tại **[`MIGRATE_POSTGRES_TO_MYSQL.md`](./MIGRATE_POSTGRES_TO_MYSQL.md)**.
+> Thực hiện xong file migration đó **trước khi** code tiếp task nào mới, để
+> tránh vừa code vừa đổi hạ tầng cùng lúc.
 
 ---
 
@@ -133,10 +137,13 @@ docker compose up -d
 docker compose ps
 ```
 
-Nội dung gồm 2 service:
-- **postgres** — port `5432`, db `airline_db`, user/pass `airline_user`/`airline_pass`
+Nội dung gồm các service hạ tầng:
+- **mysql** — port `3306`, db `airline_db`, user/pass `airline_user`/`airline_pass`
+  (xem [`MIGRATE_POSTGRES_TO_MYSQL.md`](./MIGRATE_POSTGRES_TO_MYSQL.md) để
+  áp dụng đổi từ service `postgres` cũ)
 - **rabbitmq** — port `5672` (AMQP) + `15672` (Management UI, mở trình duyệt để
   xem queue/exchange trực quan — rất hữu ích khi debug Task 5)
+- **redis** — port `6379` (cache kết quả search, xem Task 6)
 
 App Spring Boot vẫn chạy local (không container hoá) để bạn dev nhanh. Phần
 `spring.datasource.*` / `spring.rabbitmq.*` cần thêm vào `application.properties`

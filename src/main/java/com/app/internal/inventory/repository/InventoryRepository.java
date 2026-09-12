@@ -30,7 +30,7 @@ public interface InventoryRepository extends JpaRepository<FlightTicketInventory
     // CỐ Ý KHÔNG lọc availableSeats >= passengerCount ở đây (khác Phase A) -
     // Phase B (TASK6_SEARCH_REDIS_CACHE.md) cache nguyên list khớp
     // route+ngày+hạng ghế, lọc passengerCount áp dụng SAU khi lấy dữ liệu
-    // (cache hit hay Postgres đều qua chung 1 bước lọc ở FlightSearchService),
+    // (cache hit hay MySQL đều qua chung 1 bước lọc ở FlightSearchService),
     // để 1 route+ngày hot chỉ tốn đúng 1 cache entry thay vì nổ theo mọi tổ
     // hợp passengerCount.
     @Query("""

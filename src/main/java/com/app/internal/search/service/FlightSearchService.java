@@ -25,7 +25,7 @@ public class FlightSearchService {
     @Transactional(readOnly = true)
     public List<FlightSearchResponse> search(FlightSearchRequest request) {
         List<FlightTicketInventory> matches = loadMatches(request);
-        // passengerCount lọc SAU khi lấy matches (cache hit hay Postgres đều
+        // passengerCount lọc SAU khi lấy matches (cache hit hay MySQL đều
         // qua đây) - matches chỉ khớp route+ngày+hạng ghế, KHÔNG khớp sẵn
         // passengerCount (xem InventoryRepository.searchAvailable).
         List<FlightTicketInventory> withEnoughSeats = matches.stream()
@@ -34,7 +34,7 @@ public class FlightSearchService {
         return formatResponse(withEnoughSeats);
     }
 
-    // Phase B: cache-aside - đọc cache trước, miss thì query Postgres rồi
+    // Phase B: cache-aside - đọc cache trước, miss thì query MySQL rồi
     // ghi lại cache (best-effort, không chặn response nếu Redis lỗi - xem
     // SearchCacheService).
     private List<FlightTicketInventory> loadMatches(FlightSearchRequest request) {
