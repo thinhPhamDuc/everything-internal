@@ -1,0 +1,25 @@
+# Task 8 (Observability) - Prometheus scrape config.
+#
+# App KHÔNG chạy trong docker-compose network (vẫn dev qua `./gradlew
+# bootRun` trên host, xem ghi chú đầu docker-compose.yml) nên Prometheus
+# (chạy trong container) phải trỏ ra host qua "host.docker.internal" thay vì
+# tên service - cần "extra_hosts: host.docker.internal:host-gateway" trong
+# docker-compose.yml để hoạt động trên Linux (Docker Desktop macOS/Windows đã
+# hỗ trợ sẵn tên này, không cần thêm).
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: "everything-internal-app"
+    metrics_path: "/actuator/prometheus"
+    static_configs:
+      - targets: ["host.docker.internal:8080"]
+        labels:
+          service: "everything-internal"
+
+  # Tự giám sát Prometheus - hữu ích để biết Prometheus có đang scrape đều
+  # đặn không, không bắt buộc nhưng gần như luôn có trong mọi setup thật.
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]

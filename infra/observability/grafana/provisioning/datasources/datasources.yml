@@ -1,0 +1,49 @@
+# Task 8 (Observability) - Grafana tự nạp sẵn 3 datasource lúc khởi động,
+# không cần bấm tay qua UI. Điểm quan trọng nhất ở đây là liên kết chéo giữa
+# 3 nguồn (traceId đi từ Tempo -> Loki -> Prometheus) - lý do chính chọn
+# Grafana thay vì mở riêng Zipkin UI/Loki UI rời rạc.
+apiVersion: 1
+
+datasources:
+  - name: Prometheus
+    uid: prometheus
+    type: prometheus
+    access: proxy
+    url: http://prometheus:9090
+    isDefault: true
+    jsonData:
+      httpMethod: POST
+
+  - name: Loki
+    uid: loki
+    type: loki
+    access: proxy
+    url: http://loki:3100
+    jsonData:
+      # Bấm "TraceID" ngay trong dòng log JSON (có field traceId do
+      # LogstashEncoder + MDC ghi ra) để nhảy thẳng sang đúng trace trong
+      # Tempo.
+      derivedFields:
+        - datasourceUid: tempo
+          matcherRegex: '"traceId":"(\w+)"'
+          name: TraceID
+          url: "$${__value.raw}"
+
+  - name: Tempo
+    uid: tempo
+    type: tempo
+    access: proxy
+    url: http://tempo:3200
+    jsonData:
+      # Từ 1 trace chậm trong Tempo, nhảy sang đúng khoảng thời gian tương
+      # ứng trong Loki (tracesToLogsV2) và sang metrics liên quan trong
+      # Prometheus (tracesToMetrics) - đúng luồng debug mô tả ở Task 8.
+      tracesToLogsV2:
+        datasourceUid: loki
+        spanStartTimeShift: "-5m"
+        spanEndTimeShift: "5m"
+        filterByTraceID: true
+      tracesToMetrics:
+        datasourceUid: prometheus
+      serviceMap:
+        datasourceUid: prometheus

@@ -1,0 +1,24 @@
+# Task 8 (Observability) - Grafana Tempo, bản single-binary tối giản cho dev.
+#
+# Nhận trace theo giao thức Zipkin ở port 9411 - app gửi thẳng qua
+# management.zipkin.tracing.endpoint (application.properties), không cần
+# thêm OpenTelemetry Collector ở bản local này.
+server:
+  http_listen_port: 3200
+
+distributor:
+  receivers:
+    zipkin:
+      endpoint: 0.0.0.0:9411
+
+storage:
+  trace:
+    backend: local
+    local:
+      path: /var/tempo/traces
+    wal:
+      path: /var/tempo/wal
+
+compactor:
+  compaction:
+    block_retention: 48h

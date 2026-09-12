@@ -49,6 +49,31 @@ dependencies {
     // 7. Spring Data Redis (Task 6 Phase B) - cache kết quả search, dùng
     // Lettuce client mặc định đi kèm.
     implementation 'org.springframework.boot:spring-boot-starter-data-redis'
+    // 8. Observability (Task 8) - Actuator expose /actuator/prometheus,
+    // Micrometer Tracing (Brave) sinh traceId/spanId + gửi trace sang Tempo
+    // qua giao thức Zipkin. Version của các dòng dưới do Spring Boot BOM quản
+    // lý (giống jjwt là ngoại lệ cần khai version tay vì không nằm trong BOM).
+    //
+    // LƯU Ý Spring Boot 4.x: autoconfigure đã tách module rất nhỏ (xem
+    // https://spring.io/blog/2025/10/28/modularizing-spring-boot/) -
+    // spring-boot-starter-actuator KHÔNG còn tự kéo theo autoconfiguration
+    // tracing/zipkin như Boot 3.x nữa, phải khai rõ 2 module dưới, nếu không
+    // toàn bộ management.tracing.*/management.zipkin.* sẽ bị lờ đi lặng lẽ
+    // (không lỗi, chỉ đơn giản là traceId/spanId không bao giờ xuất hiện).
+    implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    implementation 'io.micrometer:micrometer-registry-prometheus'
+    implementation 'io.micrometer:micrometer-tracing-bridge-brave'
+    implementation 'io.zipkin.reporter2:zipkin-reporter-brave'
+    implementation 'org.springframework.boot:spring-boot-micrometer-tracing'
+    implementation 'org.springframework.boot:spring-boot-micrometer-tracing-brave'
+    implementation 'org.springframework.boot:spring-boot-zipkin'
+    // datasource-proxy: log từng câu SQL + đánh dấu WARN khi vượt ngưỡng chậm
+    // (xem DataSourceProxyConfig) - không nằm trong Spring Boot BOM nên cần
+    // khai version tay.
+    implementation 'net.ttddyy:datasource-proxy:1.11.0'
+    // logstash-logback-encoder: xuất log dạng JSON (kèm MDC traceId/spanId)
+    // ra file để Promtail đọc và đẩy vào Loki.
+    implementation 'net.logstash.logback:logstash-logback-encoder:9.0'
 }
 
 tasks.named('test') {

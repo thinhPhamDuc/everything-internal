@@ -38,3 +38,9 @@ out/
 
 ### Claude Code ###
 .claude/settings.local.json
+
+### Task 8 - Observability ###
+# JSON log file app tự ghi ra (logback-spring.xml) để Promtail tail - không
+# phải data cần giữ trong git, cũng như data volume của Grafana/Loki/Tempo
+# nếu ai đó lỡ chạy docker compose ở chế độ bind-mount thay vì named volume.
+logs/

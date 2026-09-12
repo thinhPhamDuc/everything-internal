@@ -1,0 +1,37 @@
+# Task 8 (Observability) - Promtail đọc file JSON log app ghi ra
+# (logs/app.log, xem logback-spring.xml) và đẩy vào Loki.
+#
+# App chạy trên host (không containerize), nên Promtail KHÔNG scrape được
+# qua Docker socket như cách thường làm với container khác - phải mount thư
+# mục ./logs của host vào /var/log/app trong container Promtail (xem
+# docker-compose.yml, volume của service promtail).
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /tmp/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+
+scrape_configs:
+  - job_name: everything-internal-app
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: everything-internal
+          service: everything-internal
+          __path__: /var/log/app/*.log
+    pipeline_stages:
+      # Parse JSON do LogstashEncoder ghi ra, chỉ đưa "level" lên làm label
+      # (low-cardinality, dùng để filter theo mức log) - traceId/spanId CỐ Ý
+      # không đưa thành label (high-cardinality, sẽ làm nổ số lượng stream
+      # trong Loki) - Grafana vẫn lọc theo traceId được bằng "| json" query
+      # hoặc qua liên kết "trace to logs" từ Tempo (xem grafana datasources).
+      - json:
+          expressions:
+            level: level
+      - labels:
+          level:

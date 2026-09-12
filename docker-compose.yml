@@ -25,6 +25,10 @@ services:
       --character-set-server=utf8mb4
       --collation-server=utf8mb4_unicode_ci
       --default-time-zone=+00:00
+      --slow_query_log=1
+      --slow_query_log_file=/var/lib/mysql/slow.log
+      --long_query_time=0.5
+      --log_output=FILE
     ports:
       - "3306:3306"
     volumes:
@@ -74,10 +78,97 @@ services:
     networks:
       - airline-net
 
+  # ── Task 8: Observability (Prometheus + Loki + Tempo + Grafana) ──────────
+  # App vẫn chạy trên host (không containerize) - Prometheus/Promtail đọc dữ
+  # liệu từ host qua host.docker.internal / bind-mount thư mục ./logs, xem
+  # infra/observability/*.
+  prometheus:
+    image: prom/prometheus:v3.0.1
+    container_name: airline-prometheus
+    restart: unless-stopped
+    extra_hosts:
+      - "host.docker.internal:host-gateway" # cần cho Linux, macOS/Windows đã có sẵn
+    volumes:
+      - ./infra/observability/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090" # Prometheus UI — http://localhost:9090
+    networks:
+      - airline-net
+
+  loki:
+    image: grafana/loki:3.3.0
+    container_name: airline-loki
+    restart: unless-stopped
+    command: -config.file=/etc/loki/loki-config.yaml
+    volumes:
+      - ./infra/observability/loki/loki-config.yaml:/etc/loki/loki-config.yaml:ro
+      - loki_data:/loki
+    ports:
+      - "3100:3100"
+    networks:
+      - airline-net
+
+  promtail:
+    image: grafana/promtail:3.3.0
+    container_name: airline-promtail
+    restart: unless-stopped
+    command: -config.file=/etc/promtail/promtail-config.yaml
+    volumes:
+      - ./infra/observability/promtail/promtail-config.yaml:/etc/promtail/promtail-config.yaml:ro
+      # App ghi JSON log ra ./logs/app.log (xem logback-spring.xml) - mount
+      # đúng thư mục đó vào container để Promtail tail được (app không chạy
+      # trong container nên không scrape qua Docker socket như bình thường).
+      - ./logs:/var/log/app:ro
+    depends_on:
+      - loki
+    networks:
+      - airline-net
+
+  tempo:
+    image: grafana/tempo:2.6.1
+    container_name: airline-tempo
+    restart: unless-stopped
+    command: -config.file=/etc/tempo/tempo.yaml
+    volumes:
+      - ./infra/observability/tempo/tempo.yaml:/etc/tempo/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    ports:
+      - "9411:9411" # Zipkin-compatible ingest — app gửi trace vào đây
+      - "3200:3200" # Tempo API — Grafana query qua đây
+    networks:
+      - airline-net
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    container_name: airline-grafana
+    restart: unless-stopped
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: "Admin"
+      # Bật tính năng correlation Tempo -> Loki/Prometheus (traceToLogs,
+      # traceToMetrics, serviceMap) dùng trong datasources.yml.
+      GF_FEATURE_TOGGLES_ENABLE: "traceqlSearch correlations"
+    volumes:
+      - ./infra/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000" # Grafana UI — http://localhost:3000
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    networks:
+      - airline-net
+
 volumes:
   mysql_data:
   rabbitmq_data:
   redis_data:
+  prometheus_data:
+  loki_data:
+  tempo_data:
+  grafana_data:
 
 networks:
   airline-net:
@@ -98,4 +189,19 @@ networks:
 #
 # spring.data.redis.host=localhost
 # spring.data.redis.port=6379
+# ─────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────
+# Task 8 (Observability) — không cần thêm gì vào application.properties để
+# CHẠY 4 container này (Prometheus/Loki/Promtail/Tempo/Grafana không phải
+# datasource của app) - riêng phần app GỬI DỮ LIỆU sang chúng đã cấu hình sẵn
+# trong application.properties (management.endpoints.web.exposure.include,
+# management.zipkin.tracing.endpoint...). Chỉ cần:
+#   mkdir -p logs   # trước khi bootRun lần đầu, để bind-mount ./logs không
+#                   # bị Docker tự tạo với quyền root
+#
+# UI truy cập sau khi `docker compose up -d`:
+#   Grafana:    http://localhost:3000       (anonymous admin, chỉ cho dev)
+#   Prometheus: http://localhost:9090
+#   Tempo API:  http://localhost:3200
 # ─────────────────────────────────────────────────────────────

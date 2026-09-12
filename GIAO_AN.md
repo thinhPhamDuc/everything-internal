@@ -163,6 +163,10 @@ App Spring Boot vẫn chạy local (không container hoá) để bạn dev nhanh
 | 5 | Luồng đồng bộ tự động (Scheduler → RabbitMQ → 3rd-party mock → RabbitMQ → Spring Batch → DB) | Phần phức tạp nhất, cần Inventory (Task 4) tồn tại trước |
 | 6 | Tìm kiếm vé (client) | Cần Inventory có dữ liệu thật (từ Task 5) để search có ý nghĩa |
 | 7 | Đặt vé + Thanh toán | Bước cuối cùng của hành trình user, phụ thuộc Search (Task 6) |
+| — | **Verify migration MySQL** ([`TEST_MYSQL_MIGRATION.md`](./TEST_MYSQL_MIGRATION.md)) | **Bắt buộc chạy xong checklist này trước Task 9/10** — không vừa đổi hạ tầng vừa thêm tính năng mới cùng lúc (đúng nguyên tắc đã nêu ở đầu file) |
+| 8 | Observability nền tảng (Logging tập trung, Tracing, Slow SQL) | Nên làm sớm — Task 9/10 thêm nhiều luồng async mới, cần công cụ quan sát sẵn để debug; không phụ thuộc nghiệp vụ nên có thể làm song song bước verify MySQL ở trên |
+| 9 | Fetch song song nhiều nhà cung cấp vé (mở rộng Task 5) | Mở rộng luồng sync đã có ở Task 5 — cần Task 5 đang chạy ổn định (qua checklist MySQL) trước khi refactor |
+| 10 | Tách 3 service xử lý sau thanh toán qua MQ (mở rộng Task 7) | Mở rộng luồng thanh toán đã có ở Task 7 — độc lập với Task 9, có thể làm trước/sau/song song Task 9 |
 
 ---
 
@@ -261,7 +265,7 @@ thế cột role string tạm ở Task 1 bằng quan hệ thực sự, và cập
 **Lưu ý:**
 - Nếu thấy quá phức tạp cho MVP, có thể tạm dừng ở mức chỉ có Role (bỏ
   Permission chi tiết), thêm Permission sau khi các task khác đã chạy được.
-
+********
 ---
 
 ### Task 4 — CRUD Inventory (vé máy bay trong kho)
@@ -450,6 +454,255 @@ thất bại/hết hạn.
   bước "trừ ghế + tạo booking" phải nằm trong 1 `@Transactional`.
 - Không xử lý thanh toán đồng bộ trong cùng transaction giữ chỗ (gateway có thể
   chậm/timeout) — tách rời 2 bước như mô tả ở trên.
+
+---
+
+### Task 8 — Observability nền tảng (Logging tập trung, Distributed Tracing, Slow SQL Monitoring)
+
+**Tại sao cần:** Task 9 (multi-provider) và Task 10 (tách 3 service qua MQ) sắp
+tới đều **thêm nhiều luồng async/nhiều bước hơn** vào hệ thống — càng khó debug
+bằng cách đọc console log rời rạc từng chỗ. Cần có công cụ trace xuyên suốt
+1 request/1 batchId qua nhiều thành phần (HTTP → RabbitMQ → Spring Batch → DB)
+và phát hiện sớm câu SQL chậm, **trước khi** hệ thống phức tạp thêm — làm sau
+sẽ khó hơn nhiều vì phải "khảo cổ" lại các luồng đã có.
+
+**Phạm vi:** Chỉ target **local dev** (docker-compose) ở task này. Repo có sẵn
+`infra/terraform/` (ECS Fargate + RDS Postgres + Amazon MQ, hiện là bản
+nháp/bài tập riêng của bạn, chưa quyết dùng) — observability cho production
+trên AWS thật (mở rộng `observability.tf` từ CloudWatch tối thiểu hiện tại
+sang Amazon Managed Grafana/AMP/X-Ray) sẽ là **1 task Terraform riêng sau
+này**, không nằm trong phạm vi task này. Lưu ý luôn (không thuộc phạm vi sửa ở
+đây): `ecs.tf:115` đang trỏ `jdbc:postgresql://` trong khi app đã quyết định
+dùng MySQL — cần bạn tự quyết trước khi Terraform đó được apply thật.
+
+**Overview — kiến trúc (local dev):**
+
+```
+App (Spring Boot, chạy local qua bootRun)
+  │ logs (JSON, có traceId/spanId) ──────────► Promtail ──► Loki ────┐
+  │ metrics (Actuator /actuator/prometheus) ◄── Prometheus ──────────┤
+  │ traces (Micrometer Tracing + Brave) ─────► Tempo (Zipkin-compat) ┤
+  │ SQL query log (datasource-proxy, ngưỡng chậm, cùng traceId) ─────┤
+  └───────────────────────────────────────────────────────────────► Grafana (1 UI, correlate cả 3)
+
+MySQL container: bật thêm slow_query_log song song — nguồn đối chiếu độc lập
+```
+
+**Các bước thực hiện:**
+
+1. **Actuator + Micrometer:** thêm `spring-boot-starter-actuator` và
+   `micrometer-registry-prometheus`, expose `/actuator/prometheus` +
+   `/actuator/health` (đúng endpoint mà `ecs.tf` đã để sẵn ghi chú chờ dùng).
+2. **Distributed tracing:** thêm `micrometer-tracing-bridge-brave` +
+   `zipkin-reporter-brave`, cấu hình `management.tracing.sampling.probability=1.0`
+   (100% ở dev), trỏ reporter vào Tempo qua giao thức Zipkin (Tempo nhận
+   thẳng ở port 9411, không cần thêm OTel Collector cho bản local này).
+   traceId/spanId tự động được gắn vào MDC, log pattern mặc định của Spring
+   Boot đã in ra sẵn.
+3. **Trace xuyên suốt qua RabbitMQ (quan trọng cho Task 5/9/10):** bật
+   observation instrumentation cho `RabbitTemplate` và `@RabbitListener`
+   container factory (property tương ứng theo Spring Boot 4.1 — kiểm tra tên
+   chính xác lúc code) để 1 traceId đi xuyên suốt từ Scheduler publish →
+   Consumer#1 → Consumer#2 → Batch job, thay vì mỗi bước có traceId rời rạc.
+4. **Slow SQL — 2 lớp song song:**
+   - *App-level:* thêm `datasource-proxy` (hoặc `p6spy`) wrap `DataSource`
+     hiện tại, log mỗi câu SQL + thời gian chạy qua SLF4J, ngưỡng WARN khi
+     vượt X ms (VD 200ms) — chạy cùng thread nên tự mang theo traceId/spanId
+     của request/consumer đang xử lý, nhảy được từ trace sang đúng câu SQL
+     gây chậm.
+   - *Server-level:* thêm vào service `mysql` trong `docker-compose.yml`:
+     `--slow_query_log=1 --long_query_time=0.5 --log_output=FILE` — nguồn đối
+     chiếu độc lập, bắt được cả query không qua app JDBC.
+5. **Logging tập trung:** thêm `logstash-logback-encoder`, viết
+   `logback-spring.xml` xuất JSON log ra file (`logging.file.name=./logs/app.log`)
+   kèm MDC traceId/spanId. Vì app chạy local qua `bootRun` (chưa containerize),
+   Promtail không scrape được qua Docker socket — phải mount thư mục `./logs`
+   vào container Promtail để tail file.
+6. **Thêm 4 service vào `docker-compose.yml`** (cùng network `airline-net`):
+   `prometheus`, `loki`, `promtail`, `tempo`, `grafana` — config đặt ở
+   `infra/observability/` (thư mục con mới, tách khỏi `infra/terraform/` sẵn
+   có để không lẫn 2 việc). Prometheus scrape app qua `host.docker.internal`
+   (app chạy trên host, ngoài network compose — cần `extra_hosts` tuỳ hệ điều
+   hành). Provision sẵn 3 datasource Prometheus/Loki/Tempo trong Grafana, bật
+   liên kết chéo "trace to logs"/"trace to metrics" — đây là lý do chính chọn
+   Grafana thay vì 3 UI rời.
+7. **Test:** giả lập 1 endpoint chậm (VD `Thread.sleep` tạm, xoá sau khi test)
+   → mở Grafana → từ dashboard latency nhảy sang trace trong Tempo → từ trace
+   nhảy sang log JSON trong Loki cùng traceId → xác nhận thấy được câu SQL
+   chậm trong log nhờ datasource-proxy.
+
+**Lưu ý:**
+- Không phụ thuộc Task nào về nghiệp vụ — có thể làm song song bước verify
+  migration MySQL (khác domain: observability vs. hạ tầng DB), nhưng nên xong
+  **trước** khi bắt tay Task 9/10.
+- Không đụng vào `infra/terraform/` ở task này.
+- Khi chuyển sang production AWS thật, hướng tự nhiên (đã gợi ý sẵn trong
+  `observability.tf`) là thay Loki/Tempo tự host bằng **Amazon Managed
+  Grafana + Amazon Managed Service for Prometheus (AMP)**, Tempo bằng **AWS
+  X-Ray** hoặc OpenTelemetry Collector — coi là 1 task Terraform riêng, không
+  làm chung với task này.
+
+**Đã implement + verify thật (chạy `docker compose up`, `bootRun`, `gradlew
+test`) — 3 điều bất ngờ gặp phải, ghi lại để không mất công dò lại:**
+1. **Spring Boot 4.x tách module rất nhỏ** (xem
+   spring.io/blog/2025/10/28/modularizing-spring-boot) —
+   `spring-boot-starter-actuator` **không** tự kéo theo autoconfiguration
+   tracing/zipkin như Boot 3.x nữa. Phải khai thêm 3 dependency:
+   `spring-boot-micrometer-tracing`, `spring-boot-micrometer-tracing-brave`,
+   `spring-boot-zipkin` — thiếu 3 dòng này thì `management.tracing.*` bị lờ đi
+   **lặng lẽ, không báo lỗi**, traceId/spanId sẽ không bao giờ xuất hiện dù
+   build vẫn chạy bình thường. Tương tự, `DataSourceProperties` đã đổi package
+   từ `org.springframework.boot.autoconfigure.jdbc` (Boot 3.x) sang
+   `org.springframework.boot.jdbc.autoconfigure` (Boot 4.x).
+2. **Property đổi tên**: `management.zipkin.tracing.endpoint` (Boot 3.x, hầu
+   hết bài viết/tài liệu cũ vẫn ghi tên này) → đổi thành
+   `management.tracing.export.zipkin.endpoint` ở Boot 4.x.
+3. **Actuator bị Spring Security chặn 403 mặc định** — `SecurityConfig` hiện
+   tại yêu cầu authenticated cho `anyRequest()`, nên phải thêm
+   `.requestMatchers("/actuator/health", "/actuator/info",
+   "/actuator/prometheus").permitAll()`, nếu không Prometheus (không có JWT)
+   không scrape được gì cả.
+
+---
+
+### Task 9 — Fetch song song nhiều nhà cung cấp vé (mở rộng Task 5)
+
+**Tại sao cần:** Thực tế không chỉ có 1 GDS/đối tác cung cấp dữ liệu vé, mà nhiều
+hãng/đại lý khác nhau. Hiện tại `FlightSyncTriggerListener` chỉ gọi **1** mock
+API duy nhất (`ThirdPartyFlightMockController` → `/mock/third-party/flights`)
+bằng `RestClient` đồng bộ, không có timeout, không có khái niệm "provider" ở
+bất kỳ đâu trong code (staging record cũng không lưu nguồn). Nếu gọi tuần tự
+nhiều provider, 1 bên bị treo (timeout) hoặc die (exception) sẽ làm chậm/kẹt
+toàn bộ chu kỳ sync — cần fetch đồng thời và cô lập lỗi từng bên.
+
+**Overview:** Thêm khái niệm "provider" (nguồn cung cấp vé), fetch đồng thời
+tất cả provider bằng `CompletableFuture`, provider nào timeout/lỗi thì bỏ qua
+(log lại), vẫn tiếp tục pipeline staging → batch với dữ liệu của các provider
+còn thành công — **không** cần đổi sang WebFlux/reactive stack, giữ nguyên
+`RestClient` hiện có.
+
+**Các bước thực hiện:**
+
+1. **Provider config:** Tạo `@ConfigurationProperties(prefix = "app.sync")`
+   map sang `List<ProviderProperties>` (`name`, `url`), khai báo trong
+   `application.properties` (VD `app.sync.providers[0].name=PROVIDER_A`,
+   `app.sync.providers[0].url=...`).
+2. **Mock nhiều provider:** Thêm 2-3 endpoint mới trong
+   `ThirdPartyFlightMockController` (VD `/mock/third-party/flights/provider-a`,
+   `provider-b`, `provider-c`), cùng schema JSON như hiện tại. Cho `provider-b`
+   random sleep dài (5-8s) để giả lập **treo**, cho `provider-c` random throw
+   exception/503 để giả lập **die** — dùng để test đúng kịch bản bạn mô tả.
+3. **`ThirdPartyFlightFetchService` (mới):** với mỗi provider, gọi
+   `CompletableFuture.supplyAsync(() -> fetch(provider), dedicatedExecutor)`,
+   gắn `.orTimeout(x, SECONDS)` + `.exceptionally(ex -> ProviderFetchResult.failure(...))`
+   cho từng future riêng biệt, rồi `CompletableFuture.allOf(...).join()` để
+   đợi tất cả (mỗi future đã tự có timeout nên không có future nào treo vô hạn
+   làm chặn future khác).
+4. **Executor riêng:** Khai báo 1 `ExecutorService`/`ThreadPoolTaskExecutor`
+   bean dành riêng cho việc fetch provider (kích thước theo số provider), tránh
+   dùng chung `ForkJoinPool.commonPool()` (có thể bị Tomcat/tác vụ khác tranh
+   thread).
+5. **Timeout tầng HTTP:** `RestClientConfig` hiện đang `RestClient.create()`
+   trần, không có connect/read timeout — thêm `ClientHttpRequestFactory` có
+   timeout làm lớp phòng thủ dưới `orTimeout()` ở bước 3, tránh rò rỉ thread khi
+   socket bị treo thật sự (không chỉ app-level timeout).
+6. **Cập nhật Consumer #1** (`FlightSyncTriggerListener`): gọi
+   `ThirdPartyFlightFetchService` thay vì gọi thẳng 1 URL; ghi staging cho
+   **tất cả** provider fetch thành công (tag thêm cột `provider` mới trên
+   `FlightStagingRecord`); log rõ provider nào bị skip kèm lý do (timeout/lỗi).
+7. Vẫn publish `BatchReadyEvent` miễn còn **ít nhất 1** provider thành công.
+   Nếu cả 3 provider đều fail → không publish, log cảnh báo (cân nhắc cần
+   alert/metric riêng, không bắt buộc ở bản đầu).
+8. **Unique key Inventory:** thêm `provider` vào composite unique key hiện tại
+   (`flightCode + departureTime + seatClass` → `+ provider`) — quyết định đã
+   chốt: **giữ riêng từng dòng theo provider** thay vì merge lấy giá rẻ nhất,
+   để khách thấy được nhiều lựa chọn cùng chặng/giờ từ các nguồn khác nhau
+   (giống cách OTA thật hiển thị so sánh giá). Cập nhật `FlightInventoryWriter`
+   (logic upsert) theo key mới.
+9. Cập nhật `schema.sql`/entity cho cột `provider` mới ở cả staging và
+   inventory; cập nhật test liên quan (`FlightStagingReaderConfigTest`,
+   `FlightStagingProcessorTest`, `FlightInventoryWriterTest`).
+10. Test: đơn vị cho `ThirdPartyFlightFetchService` (mock 1 provider OK, 1
+    timeout, 1 throw exception → assert kết quả trả về đúng 1 thành công + 2
+    bị đánh dấu lỗi, thời gian chạy ≈ thời gian provider chậm nhất chứ không
+    phải tổng 3 provider cộng lại). Test tích hợp toàn luồng sync với mock
+    endpoint mới.
+
+**Lưu ý:**
+- Không cần thêm `resilience4j`/circuit-breaker cho bản đầu — `CompletableFuture`
+  + timeout đã đủ giải quyết đúng vấn đề nêu ra; có thể nâng cấp sau nếu muốn
+  học thêm circuit breaker pattern.
+- Vì đổi unique key Inventory, cần backfill/kiểm tra dữ liệu cũ (nếu đã có data
+  từ Task 5 chạy trước đó) tránh vi phạm unique constraint mới khi Hibernate
+  `ddl-auto=update` áp dụng.
+- Nên hoàn thành + verify migration MySQL (`TEST_MYSQL_MIGRATION.md`) trước khi
+  bắt đầu task này, để không lẫn lộn lỗi hạ tầng với lỗi logic mới.
+
+---
+
+### Task 10 — Tách 3 service xử lý sau thanh toán qua MQ (mở rộng Task 7)
+
+**Tại sao cần:** Hiện tại `BookingService.pay()` làm mọi thứ đồng bộ trong 1
+transaction: gọi `PaymentGatewayClient`, lưu `Payment`, set status
+CONFIRMED/CANCELLED, hoàn ghế nếu fail. Không có gửi email xác nhận, không có
+bảng lịch sử giao dịch riêng (`Payment` là bản ghi trạng thái nghiệp vụ, không
+phải audit log). Nếu sau này thêm gửi email/ghi lịch sử vào cùng transaction
+đó, 1 bên chậm/lỗi (VD mail server down) sẽ ảnh hưởng tới toàn bộ luồng thanh
+toán — cần tách rời để cô lập lỗi, đúng như pattern async đã dùng ở Task 1 cho
+email đăng ký (`AuthService` → `TransactionSynchronization.afterCommit()` →
+RabbitMQ → `UserRegisteredEventListener`).
+
+**Overview:** Sau khi `pay()` commit xong, publish 1 event
+`BookingPaymentEvent` lên RabbitMQ; 3 consumer độc lập (mỗi consumer 1
+queue + DLQ riêng) xử lý: ghi lịch sử giao dịch, gửi mail, và xác
+nhận/đối soát kho — **không** đưa việc trừ/hoàn ghế ra async (vẫn giữ đồng bộ
+trong `BookingService` để đảm bảo tính đúng đắn transaction, tránh oversell).
+
+**Các bước thực hiện:**
+
+1. **Event mới:** `BookingPaymentEvent` (bookingId, userId, inventoryId,
+   amount, status SUCCESS/FAILED, transactionRef, paidAt).
+2. **Publisher:** Trong `BookingService.pay()`, sau khi transaction commit
+   (dùng đúng pattern `TransactionSynchronization.afterCommit()` như
+   `AuthService.register()` — **không** publish trước khi commit, tránh
+   bug publish rồi rollback).
+3. **RabbitMQ config mới** (`booking/mq/BookingEventRabbitMQConfig.java`):
+   topic exchange `app.booking.events.exchange`, 3 queue (mỗi queue kèm DLQ
+   riêng qua `x-dead-letter-exchange`, theo đúng cách `SyncRabbitMQConfig`
+   đang làm) cùng bind vào routing key của event:
+   - `booking.payment.history.queue`
+   - `booking.payment.email.queue`
+   - `booking.payment.inventory.queue`
+4. **`TransactionHistoryListener`:** ghi bảng `transaction_history` (entity +
+   repository mới, tách khỏi `Payment`) — id, bookingId, userId, amount,
+   status, transactionRef, occurredAt. Thêm unique constraint trên
+   `booking_id` (+ có thể `status`) để idempotent khi RabbitMQ redeliver
+   message trùng.
+5. **`PaymentEmailListener`:** mở rộng `EmailService` hiện có (đang là
+   log-stub, giống cách `sendWelcomeEmail` đang hoạt động — dự án chưa có
+   `spring-boot-starter-mail` nên vẫn giữ dạng log cho tới khi quyết định tích
+   hợp SMTP thật) thêm `sendBookingConfirmationEmail()` /
+   `sendPaymentFailedEmail()`.
+6. **`InventoryConfirmationListener`:** **không** trừ/hoàn ghế lại (đã xử lý
+   đồng bộ ở bước trừ/hoàn ghế trong `BookingService`, tránh trừ ghế 2 lần) —
+   chỉ ghi nhận/đối soát, VD cập nhật `lastSyncedAt` trên
+   `FlightTicketInventory` liên quan hoặc ghi log đối soát số ghế đã bán so
+   với `availableSeats` hiện tại, phục vụ audit/monitoring.
+7. Test: unit test từng listener (mock repository/EmailService), test đảm bảo
+   event chỉ publish sau commit (không publish khi transaction rollback), test
+   idempotency khi gửi trùng `BookingPaymentEvent`.
+
+**Lưu ý:**
+- Điểm quan trọng nhất: **giữ nguyên logic trừ/hoàn ghế đồng bộ** trong
+  `BookingService` — task này chỉ tách phần "side effect" (lịch sử, mail, đối
+  soát) ra async, không phải tách nghiệp vụ trừ kho ra khỏi transaction chính.
+  Nếu đưa cả trừ/hoàn ghế ra async sẽ mất tính nhất quán ngay lúc thanh toán
+  (rủi ro ghế bị giữ sai trạng thái trong lúc chờ consumer xử lý).
+- 3 queue riêng (không dùng 1 queue rồi xử lý tuần tự 3 việc trong 1 listener)
+  là điểm cốt lõi đáp ứng đúng yêu cầu "tách ra tránh ảnh hưởng lẫn nhau" — lỗi
+  ở `PaymentEmailListener` (VD mail server down) không được phép chặn
+  `TransactionHistoryListener` hay `InventoryConfirmationListener`.
+- Độc lập với Task 9, có thể làm trước/sau/song song.
 
 ---
 

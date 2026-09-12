@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Task 8 (Observability): giữ CONSOLE_LOG_PATTERN mặc định của Spring Boot khi
+  in ra console (đã tự gồm traceId/spanId nhờ micrometer-tracing-bridge-brave
+  trên classpath, không cần cấu hình gì thêm cho phần này) - chỉ thêm 1
+  appender JSON ghi ra file để Promtail (infra/observability/promtail) tail và
+  đẩy vào Loki. Không include base.xml của Spring Boot (đã có sẵn CONSOLE +
+  FILE plain-text) để tránh khai báo <root> 2 lần - tự khai lại CONSOLE bằng
+  đúng pattern mặc định lấy từ defaults.xml.
+-->
+<configuration>
+    <include resource="org/springframework/boot/logging/logback/defaults.xml"/>
+
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>${CONSOLE_LOG_PATTERN}</pattern>
+            <charset>UTF-8</charset>
+        </encoder>
+    </appender>
+
+    <appender name="JSON_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/app.log</file>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/app.%d{yyyy-MM-dd}.%i.log.gz</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+        <!-- LogstashEncoder tự đưa toàn bộ MDC (traceId, spanId...) thành
+             field JSON top-level, không cần khai báo includeMdcKeyName. -->
+        <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+    </appender>
+
+    <root level="INFO">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="JSON_FILE"/>
+    </root>
+</configuration>

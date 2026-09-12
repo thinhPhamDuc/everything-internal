@@ -38,6 +38,12 @@ public class SecurityConfig {
                         // Task 6: search vé - public, client chưa đăng nhập vẫn dùng được
                         // (đúng GIAO_AN Task 6 + TASK6_SEARCH_REDIS_CACHE.md).
                         .requestMatchers("/flights/search").permitAll()
+                        // Task 8: health/info/prometheus phải public để Prometheus (chạy
+                        // trong container, không có JWT) scrape được, và để dùng làm
+                        // health check target (VD ALB) - management.endpoints.web.exposure
+                        // đã giới hạn chỉ 3 endpoint này expose ra (application.properties),
+                        // không phải "*" nên không lộ endpoint quản trị nhạy cảm.
+                        .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
