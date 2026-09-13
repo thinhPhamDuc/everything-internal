@@ -80,6 +80,7 @@ class UserSoftDeleteTest {
         userId = user.getId();
 
         FlightTicketInventory inventory = inventoryRepository.save(FlightTicketInventory.builder()
+                .provider("MANUAL")
                 .flightCode("VN999")
                 .airline("Vietnam Airlines")
                 .origin("HAN")

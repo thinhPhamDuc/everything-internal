@@ -14,7 +14,8 @@ import java.util.Optional;
 // Phần quan trọng nhất Task 5: tự findBy... rồi quyết định insert/update,
 // KHÔNG dùng save() để JPA tự "upsert" - save() chỉ insert-vs-update dựa
 // theo id đã có hay chưa, mà dữ liệu từ staging không có id Inventory, chỉ
-// có tổ hợp unique key nghiệp vụ (flightCode + departureTime + seatClass).
+// có tổ hợp unique key nghiệp vụ (flightCode + departureTime + seatClass +
+// provider - đã thêm "provider" ở Task 9, xem FlightTicketInventory).
 //
 // Đánh dấu FlightStagingRecord.processed=true CỐ Ý KHÔNG làm ở đây theo
 // từng dòng (xem batch/job/FlightImportJobConfig - có 1 Step riêng chạy
@@ -37,8 +38,9 @@ public class FlightInventoryWriter implements ItemWriter<FlightTicketInventory> 
 
         for (FlightTicketInventory incoming : chunk) {
             Optional<FlightTicketInventory> existing = inventoryRepository
-                    .findByFlightCodeAndDepartureTimeAndSeatClass(
-                            incoming.getFlightCode(), incoming.getDepartureTime(), incoming.getSeatClass());
+                    .findByFlightCodeAndDepartureTimeAndSeatClassAndProvider(
+                            incoming.getFlightCode(), incoming.getDepartureTime(), incoming.getSeatClass(),
+                            incoming.getProvider());
 
             if (existing.isPresent()) {
                 // UPDATE: chỉ cập nhật field "sống" - KHÔNG động vào

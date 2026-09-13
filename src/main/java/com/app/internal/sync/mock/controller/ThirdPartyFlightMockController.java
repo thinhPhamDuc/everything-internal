@@ -1,8 +1,11 @@
 package com.app.internal.sync.mock.controller;
 
 import com.app.internal.sync.mock.dto.MockFlightDto;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -16,6 +19,17 @@ import java.util.concurrent.ThreadLocalRandom;
 // seatsLeft ±10%) để mô phỏng dữ liệu đối tác luôn "sống" - dùng để tự mắt
 // xác nhận Inventory thay đổi qua mỗi lần Job Task 5 chạy, không phải do
 // cache/trùng hợp.
+//
+// Task 9: thêm 3 endpoint /provider-{a,b,c} mô phỏng 3 nhà cung cấp khác
+// nhau CÙNG schema JSON (chỉ khác hành vi) - dùng để test
+// ThirdPartyFlightFetchService fetch song song và cô lập lỗi từng provider:
+// - provider-a: bình thường, phản hồi nhanh.
+// - provider-b: random sleep 5-8s - giả lập TREO (vượt ngưỡng
+//   app.sync.provider-fetch-timeout-seconds).
+// - provider-c: ~60% random throw lỗi 503 - giả lập DIE không ổn định.
+// Endpoint gốc "/mock/third-party/flights" giữ nguyên (không đổi) để không
+// phá health-check/tài liệu cũ đang trỏ vào đó.
+@Slf4j
 @RestController
 public class ThirdPartyFlightMockController {
 
@@ -30,10 +44,46 @@ public class ThirdPartyFlightMockController {
 
     @GetMapping("/mock/third-party/flights")
     public List<MockFlightDto> getFlights() {
+        return buildFlights();
+    }
+
+    @GetMapping("/mock/third-party/flights/provider-a")
+    public List<MockFlightDto> providerA() {
+        return buildFlights();
+    }
+
+    @GetMapping("/mock/third-party/flights/provider-b")
+    public List<MockFlightDto> providerB() {
+        long sleepMs = ThreadLocalRandom.current().nextLong(5_000, 8_001);
+        log.info("[MockProvider] provider-b giả lập treo {}ms trước khi phản hồi", sleepMs);
+        sleepQuietly(sleepMs);
+        return buildFlights();
+    }
+
+    @GetMapping("/mock/third-party/flights/provider-c")
+    public List<MockFlightDto> providerC() {
+        // ~60% die - đủ thường xuyên để thấy được logic "bỏ qua provider lỗi"
+        // hoạt động qua nhiều chu kỳ sync liên tiếp khi test tay.
+        if (ThreadLocalRandom.current().nextInt(100) < 60) {
+            log.info("[MockProvider] provider-c giả lập die (503)");
+            throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE, "provider-c tạm thời không khả dụng");
+        }
+        return buildFlights();
+    }
+
+    private List<MockFlightDto> buildFlights() {
         LocalDateTime now = LocalDateTime.now();
         return TEMPLATES.stream()
                 .map(template -> template.toDto(now))
                 .toList();
+    }
+
+    private static void sleepQuietly(long millis) {
+        try {
+            Thread.sleep(millis);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private record FlightTemplate(

@@ -21,6 +21,7 @@ class FlightStagingProcessorTest {
     private FlightStagingRecord.FlightStagingRecordBuilder validBuilder() {
         return FlightStagingRecord.builder()
                 .batchId("batch-1")
+                .provider("PROVIDER_A")
                 .rawFlightCode("VN101")
                 .rawAirline("Vietnam Airlines")
                 .rawOrigin("HAN")
@@ -41,6 +42,7 @@ class FlightStagingProcessorTest {
         FlightTicketInventory result = processor.process(raw);
 
         assertNotNull(result);
+        assertEquals("PROVIDER_A", result.getProvider());
         assertEquals("VN101", result.getFlightCode());
         assertEquals("Vietnam Airlines", result.getAirline());
         assertEquals("HAN", result.getOrigin());

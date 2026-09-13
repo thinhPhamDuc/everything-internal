@@ -40,6 +40,13 @@ public class FlightStagingRecord {
     @Column(name = "batch_id", nullable = false, length = 36)
     private String batchId;
 
+    // Task 9: tên provider đã fetch ra dòng này (VD "PROVIDER_A") - 1 batchId
+    // giờ gộp dữ liệu từ NHIỀU provider fetch song song (xem
+    // ThirdPartyFlightFetchService), cần cột này để Inventory (Bước 9 dưới)
+    // biết dòng nào đến từ nguồn nào.
+    @Column(name = "provider", nullable = false, length = 50)
+    private String provider;
+
     @Column(name = "raw_flight_code", nullable = false, length = 20)
     private String rawFlightCode;
 

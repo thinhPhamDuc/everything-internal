@@ -85,6 +85,7 @@ class UserLazyLoadingTest {
                 .build());
 
         FlightTicketInventory inventory = inventoryRepository.save(FlightTicketInventory.builder()
+                .provider("MANUAL")
                 .flightCode("VN123")
                 .airline("Vietnam Airlines")
                 .origin("HAN")

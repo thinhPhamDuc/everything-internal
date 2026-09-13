@@ -74,6 +74,13 @@ dependencies {
     // logstash-logback-encoder: xuất log dạng JSON (kèm MDC traceId/spanId)
     // ra file để Promtail đọc và đẩy vào Loki.
     implementation 'net.logstash.logback:logstash-logback-encoder:9.0'
+    // 9. Test cho ThirdPartyFlightFetchServiceTest (Task 9) - dựng 1 HttpServer
+    // JDK thật để trả JSON giả lập provider. jackson-databind/jsr310 CHẠY
+    // ĐƯỢC ở runtime app (webmvc kéo theo gián tiếp) nhưng Spring Boot 4.x
+    // không expose 2 artifact này ở COMPILE classpath cho code tự viết import
+    // trực tiếp - phải khai tay (version do Spring Boot Jackson BOM quản lý).
+    testImplementation 'com.fasterxml.jackson.core:jackson-databind'
+    testImplementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
 }
 
 tasks.named('test') {

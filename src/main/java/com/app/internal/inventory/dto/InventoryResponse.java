@@ -17,5 +17,6 @@ public record InventoryResponse(
         Integer availableSeats,
         String status,
         String sourceSystem,
+        String provider,
         LocalDateTime lastSyncedAt) {
 }

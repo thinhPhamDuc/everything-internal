@@ -44,6 +44,7 @@ public class FlightStagingProcessor implements ItemProcessor<FlightStagingRecord
         // mới là nơi quyết định đây là INSERT (tự điền) hay UPDATE (giữ
         // nguyên id/createdAt cũ, chỉ lấy price/availableSeats từ object này).
         return FlightTicketInventory.builder()
+                .provider(raw.getProvider())
                 .flightCode(raw.getRawFlightCode())
                 .airline(raw.getRawAirline())
                 .origin(raw.getRawOrigin())

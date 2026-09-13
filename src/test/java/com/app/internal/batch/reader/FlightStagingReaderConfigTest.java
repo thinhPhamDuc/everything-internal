@@ -70,6 +70,7 @@ class FlightStagingReaderConfigTest {
     private FlightStagingRecord buildRecord(String batchId, String flightCode) {
         return FlightStagingRecord.builder()
                 .batchId(batchId)
+                .provider("PROVIDER_A")
                 .rawFlightCode(flightCode)
                 .rawAirline("Test Airline")
                 .rawOrigin("HAN")

@@ -18,9 +18,16 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
         name = "flight_ticket_inventory",
+        // Task 9: thêm "provider" vào unique key - quyết định đã chốt là GIỮ
+        // RIÊNG từng dòng theo provider (không merge lấy giá rẻ nhất), để
+        // khách thấy được nhiều lựa chọn cùng chặng/giờ từ các nguồn khác
+        // nhau (giống OTA thật hiển thị so sánh giá). Vé nhập tay (Task 4)
+        // dùng provider="MANUAL" (xem InventoryService) - KHÔNG để null vì
+        // MySQL coi NULL khác NULL trong unique constraint, sẽ vô tình cho
+        // phép trùng vé nhập tay.
         uniqueConstraints = @UniqueConstraint(
-                name = "uk_inventory_flight_departure_class",
-                columnNames = {"flight_code", "departure_time", "seat_class"}
+                name = "uk_inventory_flight_departure_class_provider",
+                columnNames = {"flight_code", "departure_time", "seat_class", "provider"}
         ),
         indexes = @Index(
                 name = "idx_inventory_route_departure",
@@ -81,6 +88,13 @@ public class FlightTicketInventory {
     // vào tự động - chưa dùng để phân nhánh logic ở Task 4, khai báo sẵn.
     @Column(name = "source_system", nullable = false, length = 20)
     private String sourceSystem;
+
+    // Task 9: tên nhà cung cấp cụ thể (VD "PROVIDER_A") khi sourceSystem=SYNC,
+    // hoặc "MANUAL" khi admin tự nhập (xem InventoryService.SOURCE_MANUAL) -
+    // khác sourceSystem ở chỗ sourceSystem chỉ phân biệt "tự động hay tay",
+    // còn provider phân biệt CỤ THỂ nguồn nào trong nhiều nguồn tự động.
+    @Column(name = "provider", nullable = false, length = 50)
+    private String provider;
 
     @Column(name = "last_synced_at")
     private LocalDateTime lastSyncedAt;

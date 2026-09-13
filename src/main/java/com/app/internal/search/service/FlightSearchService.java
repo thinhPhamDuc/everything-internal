@@ -75,6 +75,7 @@ public class FlightSearchService {
                 inventory.getArrivalTime(),
                 inventory.getSeatClass().name(),
                 inventory.getPrice(),
-                inventory.getAvailableSeats());
+                inventory.getAvailableSeats(),
+                inventory.getProvider());
     }
 }

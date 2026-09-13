@@ -45,8 +45,8 @@ public class InventoryService {
     @Transactional
     public InventoryResponse createInventory(InventoryCreateRequest request) {
         inventoryRepository
-                .findByFlightCodeAndDepartureTimeAndSeatClass(
-                        request.getFlightCode(), request.getDepartureTime(), request.getSeatClass())
+                .findByFlightCodeAndDepartureTimeAndSeatClassAndProvider(
+                        request.getFlightCode(), request.getDepartureTime(), request.getSeatClass(), SOURCE_MANUAL)
                 .ifPresent(existing -> {
                     throw new DuplicateInventoryException(
                             "Đã tồn tại vé với flightCode=" + request.getFlightCode()
@@ -55,6 +55,10 @@ public class InventoryService {
                 });
 
         FlightTicketInventory inventory = FlightTicketInventory.builder()
+                // Task 9: vé nhập tay không có "nhà cung cấp" thật - dùng
+                // luôn "MANUAL" (giống sourceSystem) để cột provider luôn
+                // NOT NULL và unique constraint vẫn chặn trùng đúng ý cũ.
+                .provider(SOURCE_MANUAL)
                 .flightCode(request.getFlightCode())
                 .airline(request.getAirline())
                 .origin(request.getOrigin())
@@ -183,6 +187,7 @@ public class InventoryService {
                 inventory.getAvailableSeats(),
                 inventory.getStatus().name(),
                 inventory.getSourceSystem(),
+                inventory.getProvider(),
                 inventory.getLastSyncedAt());
     }
 }

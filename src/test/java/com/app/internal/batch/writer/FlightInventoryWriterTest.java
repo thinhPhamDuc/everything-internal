@@ -16,6 +16,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNotEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 
 // Gọi thẳng writer.write(...) với 1 Chunk giả (không cần chạy cả Job) -
@@ -47,6 +48,7 @@ class FlightInventoryWriterTest {
         String flightCode = "SYNC-" + System.nanoTime();
 
         FlightTicketInventory candidate = FlightTicketInventory.builder()
+                .provider("PROVIDER_A")
                 .flightCode(flightCode)
                 .airline("Test Airline")
                 .origin("HAN")
@@ -64,7 +66,8 @@ class FlightInventoryWriterTest {
         writer.write(new Chunk<>(List.of(candidate)));
 
         FlightTicketInventory saved = inventoryRepository
-                .findByFlightCodeAndDepartureTimeAndSeatClass(flightCode, departureTime, SeatClass.ECONOMY)
+                .findByFlightCodeAndDepartureTimeAndSeatClassAndProvider(
+                        flightCode, departureTime, SeatClass.ECONOMY, "PROVIDER_A")
                 .orElseThrow();
         createdIds = List.of(saved.getId());
 
@@ -80,7 +83,14 @@ class FlightInventoryWriterTest {
         LocalDateTime departureTime = LocalDateTime.now().plusDays(3).withNano(0);
         String flightCode = "SYNC-" + System.nanoTime();
 
+        // existing mô phỏng 1 dòng ĐÃ TỪNG được PROVIDER_A sync vào ở chu kỳ
+        // trước, sau đó admin tay đóng vé (Task 4 changeStatus) + tự chỉnh
+        // totalSeats - Task 9: unique key giờ gồm cả provider, nên candidate
+        // dưới đây PHẢI cùng provider="PROVIDER_A" mới khớp đúng dòng này (1
+        // candidate provider KHÁC, VD "PROVIDER_B", sẽ tạo dòng MỚI riêng
+        // thay vì update - đúng ý đồ "giữ riêng theo provider" của Task 9).
         FlightTicketInventory existing = inventoryRepository.save(FlightTicketInventory.builder()
+                .provider("PROVIDER_A")
                 .flightCode(flightCode)
                 .airline("Test Airline")
                 .origin("HAN")
@@ -92,12 +102,13 @@ class FlightInventoryWriterTest {
                 .totalSeats(180) // admin đã set công suất thật (Task 4)
                 .availableSeats(50)
                 .status(InventoryStatus.CLOSED) // admin đã tay đóng vé
-                .sourceSystem("MANUAL")
+                .sourceSystem("SYNC")
                 .createdAt(LocalDateTime.now().minusDays(1))
                 .build());
         createdIds = List.of(existing.getId());
 
         FlightTicketInventory candidate = FlightTicketInventory.builder()
+                .provider("PROVIDER_A")
                 .flightCode(flightCode)
                 .airline("Test Airline")
                 .origin("HAN")
@@ -120,6 +131,64 @@ class FlightInventoryWriterTest {
         assertEquals(45, updated.getAvailableSeats());
         assertEquals(180, updated.getTotalSeats()); // giữ nguyên - KHÔNG bị ghi đè
         assertEquals(InventoryStatus.CLOSED, updated.getStatus()); // giữ nguyên - KHÔNG tự mở lại
-        assertEquals("MANUAL", updated.getSourceSystem()); // giữ nguyên
+        assertEquals("PROVIDER_A", updated.getProvider()); // giữ nguyên - vẫn đúng 1 dòng cũ, không tạo mới
+    }
+
+    // Task 9: quyết định đã chốt "giữ riêng từng dòng theo provider" (không
+    // merge lấy giá rẻ nhất) - 2 provider cùng flightCode+departureTime+
+    // seatClass PHẢI tạo ra 2 dòng Inventory riêng, không được ghi đè lẫn
+    // nhau, để khách thấy được nhiều lựa chọn cùng chặng/giờ từ các nguồn
+    // khác nhau.
+    @Test
+    void write_2ProviderCungFlightCodeDepartureSeatClass_taoRa2DongRieng() throws Exception {
+        LocalDateTime departureTime = LocalDateTime.now().plusDays(3).withNano(0);
+        String flightCode = "SYNC-" + System.nanoTime();
+
+        FlightTicketInventory fromProviderA = FlightTicketInventory.builder()
+                .provider("PROVIDER_A")
+                .flightCode(flightCode)
+                .airline("Test Airline")
+                .origin("HAN")
+                .destination("SGN")
+                .departureTime(departureTime)
+                .arrivalTime(departureTime.plusHours(2))
+                .seatClass(SeatClass.ECONOMY)
+                .price(new BigDecimal("1000000"))
+                .totalSeats(50)
+                .availableSeats(50)
+                .status(InventoryStatus.OPEN)
+                .sourceSystem("SYNC")
+                .build();
+        FlightTicketInventory fromProviderB = FlightTicketInventory.builder()
+                .provider("PROVIDER_B")
+                .flightCode(flightCode)
+                .airline("Test Airline")
+                .origin("HAN")
+                .destination("SGN")
+                .departureTime(departureTime)
+                .arrivalTime(departureTime.plusHours(2))
+                .seatClass(SeatClass.ECONOMY)
+                .price(new BigDecimal("1100000")) // giá khác PROVIDER_A - đúng ý "so sánh giá"
+                .totalSeats(30)
+                .availableSeats(30)
+                .status(InventoryStatus.OPEN)
+                .sourceSystem("SYNC")
+                .build();
+
+        writer.write(new Chunk<>(List.of(fromProviderA, fromProviderB)));
+
+        FlightTicketInventory savedA = inventoryRepository
+                .findByFlightCodeAndDepartureTimeAndSeatClassAndProvider(
+                        flightCode, departureTime, SeatClass.ECONOMY, "PROVIDER_A")
+                .orElseThrow();
+        FlightTicketInventory savedB = inventoryRepository
+                .findByFlightCodeAndDepartureTimeAndSeatClassAndProvider(
+                        flightCode, departureTime, SeatClass.ECONOMY, "PROVIDER_B")
+                .orElseThrow();
+        createdIds = List.of(savedA.getId(), savedB.getId());
+
+        assertNotEquals(savedA.getId(), savedB.getId());
+        assertEquals(0, new BigDecimal("1000000").compareTo(savedA.getPrice()));
+        assertEquals(0, new BigDecimal("1100000").compareTo(savedB.getPrice()));
     }
 }

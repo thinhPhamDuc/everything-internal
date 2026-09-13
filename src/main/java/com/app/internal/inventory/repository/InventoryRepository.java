@@ -14,8 +14,9 @@ import java.util.Optional;
 
 public interface InventoryRepository extends JpaRepository<FlightTicketInventory, Long> {
 
-    Optional<FlightTicketInventory> findByFlightCodeAndDepartureTimeAndSeatClass(
-            String flightCode, LocalDateTime departureTime, SeatClass seatClass);
+    // Task 9: thêm "provider" vào unique key - xem FlightTicketInventory.
+    Optional<FlightTicketInventory> findByFlightCodeAndDepartureTimeAndSeatClassAndProvider(
+            String flightCode, LocalDateTime departureTime, SeatClass seatClass, String provider);
 
     // Containing + IgnoreCase với default "" ở Controller -> "" là substring
     // của mọi chuỗi nên không lọc gì khi bỏ trống param, không cần nhánh

@@ -638,6 +638,48 @@ còn thành công — **không** cần đổi sang WebFlux/reactive stack, giữ
 - Nên hoàn thành + verify migration MySQL (`TEST_MYSQL_MIGRATION.md`) trước khi
   bắt đầu task này, để không lẫn lộn lỗi hạ tầng với lỗi logic mới.
 
+**Đã implement + verify thật (chạy `gradlew test`, `bootRun`, quan sát nhiều
+chu kỳ sync thật + query MySQL trực tiếp) — 2 bug thực tế bắt được, không
+đoán trước được nếu chỉ đọc code:**
+1. **`ddl-auto=update` không tự xoá/đổi unique constraint cũ** - đổi unique
+   key từ 3 cột sang 4 cột (thêm `provider`) khiến MySQL có ĐỒNG THỜI cả
+   constraint cũ (3 cột) lẫn mới (4 cột), constraint cũ vẫn chặn nhầm 2 dòng
+   hợp lệ khác provider → `ConstraintViolationException`. Cách xử lý ở môi
+   trường dev: `docker compose down -v` xoá volume MySQL rồi tạo lại từ đầu
+   (chấp nhận được vì data toàn là mock). Ở production thật sẽ cần
+   Flyway/Liquibase migration DROP CONSTRAINT tay, `ddl-auto=update` KHÔNG
+   đủ an toàn cho thay đổi loại này.
+2. **Spring Security chặn nhầm `/error` → mọi exception ở endpoint permitAll
+   đều trả về 403** thay vì status code thật. Khi `provider-c` throw
+   `ResponseStatusException(503)` để giả lập die, Spring forward nội bộ sang
+   `/error` (`BasicErrorController`) để render lỗi - dispatch này ĐI QUA LẠI
+   security filter chain, và vì `SecurityConfig` chưa permitAll `/error`, kết
+   quả cuối cùng luôn là 403 (che mất status thật, dù là 503/500/400). Đã sửa
+   bằng cách thêm `.requestMatchers("/error").permitAll()` - đây là lỗi ảnh
+   hưởng **toàn app**, không riêng mock endpoint, nên coi là fix chung hữu
+   ích cho mọi exception path có sẵn từ trước.
+
+**Mở rộng thêm sau khi review: retry khi provider "die"** (theo yêu cầu
+thực tế - trước khi bỏ qua 1 provider lỗi, thử lại vài lần xem có phải lỗi
+tạm thời không):
+- Thêm `providerFetchMaxAttempts` + `providerRetryDelayMs` vào
+  `SyncProviderProperties`, retry loop nằm trong `fetchOne()` (bên trong
+  `orTimeout()` - tổng thời gian retry vẫn nằm trong ngân sách
+  `providerFetchTimeoutSeconds`, không có riêng 1 timeout khác cho retry).
+- **Bug thứ 3 bắt được lúc chạy live** (quan trọng, dễ mắc lại nếu làm
+  tương tự sau này): retry ban đầu bắt luôn `RestClientException` (bao gồm
+  cả lỗi I/O như đọc timeout) - khiến provider "treo" (PROVIDER_B) bị retry
+  nhầm, lãng phí thêm 2×6s chạy nền vô ích cho 1 kết quả không ai còn đợi
+  (future ngoài đã báo "bỏ qua" từ lâu qua `orTimeout()`). **Sửa bằng cách
+  thu hẹp retry chỉ bắt `RestClientResponseException`** (server có phản hồi
+  nhưng là lỗi 4xx/5xx - đúng nghĩa "die" mà yêu cầu ban đầu muốn) - lỗi I/O
+  (`ResourceAccessException`: connection refused/timeout) ném thẳng ra
+  ngoài ngay từ lần đầu, không retry.
+- Test `ThirdPartyFlightFetchServiceTest` có 1 lưu ý khi viết: JDK
+  `HttpURLConnection` tự động retry 1 lần ở tầng transport cho GET khi gặp
+  lỗi kết nối (hành vi của JDK, không phải bug code mình) - test đo "số lần
+  gọi tới server" cho case lỗi I/O phải chấp nhận `<= 2` thay vì đúng `1`.
+
 ---
 
 ### Task 10 — Tách 3 service xử lý sau thanh toán qua MQ (mở rộng Task 7)

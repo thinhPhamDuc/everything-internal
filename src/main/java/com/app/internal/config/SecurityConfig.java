@@ -44,6 +44,13 @@ public class SecurityConfig {
                         // đã giới hạn chỉ 3 endpoint này expose ra (application.properties),
                         // không phải "*" nên không lộ endpoint quản trị nhạy cảm.
                         .requestMatchers("/actuator/health", "/actuator/info", "/actuator/prometheus").permitAll()
+                        // Task 9: bug phát hiện lúc test provider-c (mock/third-party) throw
+                        // ResponseStatusException - Spring forward nội bộ sang "/error" để
+                        // render lỗi (BasicErrorController), dispatch này ĐI QUA LẠI security
+                        // filter chain; thiếu dòng permitAll này, MỌI exception ở MỌI endpoint
+                        // permitAll (không riêng mock) đều bị trả về 403 thay vì đúng status
+                        // code (403 che mất status thật, VD 503/500/400 đều thành 403).
+                        .requestMatchers("/error").permitAll()
                         .anyRequest().authenticated()
                 )
                 .addFilterBefore(jwtFilter, UsernamePasswordAuthenticationFilter.class);
