@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<title>Bug Playground - CORS test client</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 720px; margin: 40px auto; padding: 0 16px; }
+  h1 { font-size: 20px; }
+  button { display: block; width: 100%; padding: 10px; margin: 8px 0; cursor: pointer; }
+  pre { background: #111; color: #0f0; padding: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; }
+  .hint { color: #555; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>Bug Playground - Client test Bug #4 (CORS &amp; Routing)</h1>
+<p class="hint">
+  Origin hiện tại của trang này: <code id="origin"></code><br>
+  Mở trực tiếp bằng file:// -&gt; origin là <code>null</code>, sẽ LUÔN bị chặn
+  CORS (đúng bug mặc định của gateway). Muốn thử trạng thái "đã fix", chạy
+  <code>python3 -m http.server 5500</code> trong thư mục này, mở
+  <code>http://localhost:5500</code>, rồi set
+  <code>GATEWAY_CORS_ALLOWED_ORIGIN=http://localhost:5500</code> cho
+  gateway-service (xem README).<br>
+  Mở DevTools Console (F12) TRƯỚC khi bấm nút - lỗi CORS chỉ hiện ở Console,
+  không hiện trong khung log dưới (đây chính là đặc điểm cần nhớ: JS code
+  không thể "bắt" được lỗi CORS bằng try/catch bình thường, fetch() chỉ báo
+  "Failed to fetch").
+</p>
+
+<button onclick="createOrder()">1. Tạo order (POST /api/orders)</button>
+<button onclick="getOrder()">2. Xem order vừa tạo (GET /api/orders/:id)</button>
+<button onclick="payAsync()">3. Thanh toán async (POST /api/payments/:id/pay-async - test luôn Bug #4a routing)</button>
+
+<pre id="log">(chưa có gì)</pre>
+
+<script>
+  const GATEWAY = 'http://localhost:9080';
+  let lastOrderId = null;
+  document.getElementById('origin').textContent = window.location.origin || 'null (file://)';
+
+  function log(msg) {
+    document.getElementById('log').textContent = msg;
+  }
+
+  async function createOrder() {
+    log('Đang gọi POST ' + GATEWAY + '/api/orders ...');
+    try {
+      const res = await fetch(GATEWAY + '/api/orders', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ item: 'VN-SGN-HAN', amount: 1500000 })
+      });
+      const data = await res.json();
+      lastOrderId = data.id;
+      log('OK status=' + res.status + '\n' + JSON.stringify(data, null, 2));
+    } catch (err) {
+      log('fetch() FAILED: ' + err.message + '\n\n(Xem DevTools Console để thấy lỗi CORS thật sự - fetch chỉ báo chung chung "Failed to fetch")');
+    }
+  }
+
+  async function getOrder() {
+    if (!lastOrderId) { log('Chưa có order - bấm nút 1 trước.'); return; }
+    log('Đang gọi GET ' + GATEWAY + '/api/orders/' + lastOrderId + ' ...');
+    try {
+      const res = await fetch(GATEWAY + '/api/orders/' + lastOrderId);
+      const data = await res.json();
+      log('OK status=' + res.status + '\n' + JSON.stringify(data, null, 2));
+    } catch (err) {
+      log('fetch() FAILED: ' + err.message);
+    }
+  }
+
+  async function payAsync() {
+    if (!lastOrderId) { log('Chưa có order - bấm nút 1 trước.'); return; }
+    log('Đang gọi POST ' + GATEWAY + '/api/payments/' + lastOrderId + '/pay-async ...');
+    try {
+      const res = await fetch(GATEWAY + '/api/payments/' + lastOrderId + '/pay-async', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: 1500000 })
+      });
+      const text = await res.text();
+      log('status=' + res.status + '\n' + text + '\n\n(status 404 ở đây = Bug #4a routing đang bật - gateway đang forward nhầm /api/payments/** sang order-service)');
+    } catch (err) {
+      log('fetch() FAILED: ' + err.message);
+    }
+  }
+</script>
+</body>
+</html>

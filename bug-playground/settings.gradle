@@ -1,0 +1,2 @@
+rootProject.name = 'bug-playground'
+include 'gateway-service', 'order-service', 'payment-service'

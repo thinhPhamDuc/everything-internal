@@ -1,0 +1,191 @@
+networks:
+  playground-net:
+    driver: bridge
+
+volumes:
+  kafka_data:
+  es_data:
+  mysql_data:
+
+services:
+  # ─────────────────────────────────────────────────────────────
+  # MySQL - state DÙNG CHUNG cho order-service (thay ConcurrentHashMap trong
+  # RAM riêng từng instance) - bắt buộc phải có để scale nhiều instance an
+  # toàn, xem README phần "scale order-service".
+  # ─────────────────────────────────────────────────────────────
+  mysql:
+    image: mysql:8.4
+    container_name: playground-mysql
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: playground_db
+      MYSQL_USER: playground_user
+      MYSQL_PASSWORD: playground_pass
+      MYSQL_ROOT_PASSWORD: root_pass
+    ports:
+      - "3307:3306" # tránh đụng port 3306 của MySQL bên monolith chính
+    volumes:
+      - mysql_data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot_pass"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - playground-net
+
+  # ─────────────────────────────────────────────────────────────
+  # Kafka (KRaft, 1 broker) - dùng cho Bug #2 (Data Inconsistency). App
+  # services nằm CÙNG network nên nói chuyện qua listener nội bộ kafka:9092.
+  # Port host 39092 chỉ để bạn debug bằng kafka CLI/kafkacat từ máy thật nếu
+  # muốn, không bắt buộc.
+  # ─────────────────────────────────────────────────────────────
+  kafka:
+    image: apache/kafka:3.8.0
+    container_name: playground-kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,PLAINTEXT_HOST://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:39092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      CLUSTER_ID: 8T7Hb-HQRVml16y4kBChuQ
+    ports:
+      - "39092:29092"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    networks:
+      - playground-net
+
+  kafka-ui:
+    image: provectuslabs/kafka-ui:v0.7.2
+    container_name: playground-kafka-ui
+    restart: unless-stopped
+    environment:
+      KAFKA_CLUSTERS_0_NAME: playground
+      KAFKA_CLUSTERS_0_BOOTSTRAPSERVERS: kafka:9092
+    ports:
+      - "9091:8080" # http://localhost:9091 - xem consumer lag của order-service, trực quan cho Bug #2
+    depends_on:
+      - kafka
+    networks:
+      - playground-net
+
+  # ─────────────────────────────────────────────────────────────
+  # ELK stack - riêng cho playground này (không đụng Loki/Tempo/Grafana của
+  # project chính). Security tắt hẳn (xpack.security.enabled=false) để khỏi
+  # phải setup password/certs cho môi trường học tập local-only.
+  # ─────────────────────────────────────────────────────────────
+  elasticsearch:
+    image: docker.elastic.co/elasticsearch/elasticsearch:8.15.3
+    container_name: playground-elasticsearch
+    restart: unless-stopped
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      xpack.security.http.ssl.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    ports:
+      - "9200:9200" # http://localhost:9200
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    networks:
+      - playground-net
+
+  logstash:
+    image: docker.elastic.co/logstash/logstash:8.15.3
+    container_name: playground-logstash
+    restart: unless-stopped
+    volumes:
+      - ./logstash/logstash.conf:/usr/share/logstash/pipeline/logstash.conf:ro
+    environment:
+      LS_JAVA_OPTS: "-Xms256m -Xmx256m"
+    ports:
+      - "5001:5000"   # TCP input (json_lines) - 3 service Spring Boot bắn log JSON vào đây
+      - "9601:9600"   # Logstash monitoring API
+    depends_on:
+      - elasticsearch
+    networks:
+      - playground-net
+
+  kibana:
+    image: docker.elastic.co/kibana/kibana:8.15.3
+    container_name: playground-kibana
+    restart: unless-stopped
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+      XPACK_SECURITY_ENABLED: "false"
+    ports:
+      - "5601:5601" # http://localhost:5601
+    depends_on:
+      - elasticsearch
+    networks:
+      - playground-net
+
+  # ─────────────────────────────────────────────────────────────
+  # 3 "microservice" thật, mỗi cái 1 container riêng. Build JAR trước
+  # (./gradlew build) rồi mới docker compose up --build.
+  #
+  # Toggle bug: sửa biến môi trường tương ứng ở dưới rồi
+  # `docker compose up -d --build <service>` để áp dụng (đây là config đọc
+  # lúc khởi động, không phải runtime-toggle - trừ payment-service/chaos qua
+  # REST, xem README). Mặc định (không set các biến BUG_*) = TRẠNG THÁI CÓ BUG.
+  # ─────────────────────────────────────────────────────────────
+  gateway-service:
+    build: ./gateway-service
+    container_name: playground-gateway
+    restart: unless-stopped
+    environment:
+      ORDER_SERVICE_URL: http://order-service:8080
+      # GATEWAY_PAYMENT_TARGET_URL: http://payment-service:8080   # bỏ comment để FIX Bug #4a (routing)
+      # GATEWAY_CORS_ALLOWED_ORIGIN: http://localhost:5500        # bỏ comment để FIX Bug #4b (CORS) - đổi đúng origin bạn mở cors-test-client/index.html
+      # TRACING_PROPAGATE_ENABLED: "true"                          # bỏ comment để FIX Bug #3 (tracing) - phải bật ĐỒNG THỜI ở cả 3 service
+    ports:
+      - "9080:8080" # http://localhost:9080 - entrypoint duy nhất cho mọi demo
+    depends_on:
+      - order-service
+      - payment-service
+    networks:
+      - playground-net
+
+  order-service:
+    build: ./order-service
+    container_name: playground-order
+    restart: unless-stopped
+    environment:
+      PAYMENT_SERVICE_URL: http://payment-service:8080
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      LOGSTASH_HOST: logstash
+      LOGSTASH_PORT: "5000"
+      # PAYMENT_CLIENT_READ_TIMEOUT_MS: "3000"   # bỏ comment để FIX Bug #1 (cascading failure)
+      # TRACING_PROPAGATE_ENABLED: "true"         # bỏ comment để FIX Bug #3 - phải bật ĐỒNG THỜI ở cả 3 service
+    ports:
+      - "9081:8080"
+    depends_on:
+      kafka:
+        condition: service_started
+      mysql:
+        condition: service_healthy
+    networks:
+      - playground-net
+
+  payment-service:
+    build: ./payment-service
+    container_name: playground-payment
+    restart: unless-stopped
+    environment:
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      LOGSTASH_HOST: logstash
+      LOGSTASH_PORT: "5000"
+      # TRACING_PROPAGATE_ENABLED: "true"   # bỏ comment để FIX Bug #3 - phải bật ĐỒNG THỜI ở cả 3 service
+    ports:
+      - "9082:8080"
+    depends_on:
+      - kafka
+    networks:
+      - playground-net

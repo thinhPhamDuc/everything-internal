@@ -1,0 +1,24 @@
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    // spring-kafka SUÔNG (không kèm spring-boot-starter-kafka) không đủ để
+    // Spring Boot 4.x tự autoconfigure KafkaTemplate/@KafkaListener - đúng
+    // pattern modularization đã gặp ở Task 8 (actuator/tracing). Phải dùng
+    // starter này (kéo theo module spring-boot-kafka + spring-kafka).
+    implementation 'org.springframework.boot:spring-boot-starter-kafka'
+    // Boot 4.x mặc định dùng Jackson 3.x (package tools.jackson.*) cho chính
+    // nó, NHƯNG org.springframework.kafka.support.serializer.JsonSerializer/
+    // JsonDeserializer (thư viện spring-kafka) vẫn dùng Jackson 2.x cổ điển
+    // (com.fasterxml.jackson.*) - thiếu 2 dòng dưới thì @KafkaListener chết
+    // ngay lúc khởi động với NoClassDefFoundError: JavaType (2 namespace khác
+    // nhau nên cùng tồn tại được, không xung đột). Version do Spring Boot
+    // Jackson BOM quản lý (vẫn giữ dòng Jackson 2.x cho tương thích ngược).
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+    // Chuyển OrderStore từ ConcurrentHashMap (RAM riêng từng instance) sang
+    // MySQL DÙNG CHUNG - để scale nhiều instance an toàn (xem bug vừa gặp:
+    // order tạo ở instance A, event Kafka rơi vào instance B xử lý, B không
+    // tìm thấy order vì RAM của B khác RAM của A).
+    implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    runtimeOnly 'com.mysql:mysql-connector-j'
+}

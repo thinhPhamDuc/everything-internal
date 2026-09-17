@@ -1,0 +1,41 @@
+plugins {
+    id 'org.springframework.boot' version '4.1.1' apply false
+    id 'io.spring.dependency-management' version '1.1.7' apply false
+}
+
+// 3 module = 3 service độc lập (gateway/order/payment), mỗi module tự build
+// thành 1 bootJar riêng, chạy trong 1 container riêng - đúng tinh thần
+// microservices (không dùng chung JVM/process như monolith GIAO_AN gốc).
+subprojects {
+    apply plugin: 'java'
+    apply plugin: 'org.springframework.boot'
+    apply plugin: 'io.spring.dependency-management'
+
+    group = 'com.app.playground'
+    version = '0.0.1-SNAPSHOT'
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(17)
+        }
+    }
+
+    repositories {
+        mavenCentral()
+    }
+
+    dependencies {
+        implementation 'org.springframework.boot:spring-boot-starter-actuator'
+        // JSON structured logging + gửi thẳng qua TCP tới Logstash (ELK) -
+        // xem logback-spring.xml từng service. Cùng thư viện project chính
+        // đã dùng cho Loki ở Task 8, ở đây dùng thêm appender TCP của cùng
+        // lib để bắn sang Logstash.
+        implementation 'net.logstash.logback:logstash-logback-encoder:9.0'
+        testImplementation 'org.springframework.boot:spring-boot-starter-webmvc-test'
+        testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+    }
+
+    tasks.named('test') {
+        useJUnitPlatform()
+    }
+}

@@ -1,0 +1,11 @@
+dependencies {
+    implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    implementation 'org.springframework.boot:spring-boot-starter-validation'
+    // Xem ghi chú tương tự ở order-service/build.gradle - cần starter, không
+    // chỉ spring-kafka suông, để Boot 4.x tự autoconfigure KafkaTemplate.
+    implementation 'org.springframework.boot:spring-boot-starter-kafka'
+    // Jackson 2.x cổ điển cho JsonSerializer/JsonDeserializer của spring-kafka
+    // - xem ghi chú đầy đủ ở order-service/build.gradle.
+    implementation 'com.fasterxml.jackson.core:jackson-databind'
+    implementation 'com.fasterxml.jackson.datatype:jackson-datatype-jsr310'
+}
